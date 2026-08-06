@@ -1,0 +1,6 @@
+{
+  "name": "Qamelot Media Studio",
+  "description": "Premastered HipHop, Pop & RnB Audio Production Workstation featuring 60-FPS OLED Oscilloscope, AI Beatbox-to-MIDI synth, 5-Band EQ, 3D Spatial Panner, and Qamelot Media diamond plate start screen.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
