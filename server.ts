@@ -98,22 +98,56 @@ async function startServer() {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 
-  const wss = new WebSocketServer({ server });
+  const wss = new WebSocketServer({ server, path: "/api/ws" });
+  
+  const clients = new Map<WebSocket, { id: string; color: string }>();
+  let nextId = 1;
+  const colors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef', '#f43f5e'];
 
   wss.on("connection", (ws) => {
-    console.log("Client connected via WebSocket");
+    const id = `User ${nextId++}`;
+    const color = colors[nextId % colors.length];
+    clients.set(ws, { id, color });
+    
+    // Broadcast join
+    const activeUsers = Array.from(clients.values());
+    wss.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: 'presence', users: activeUsers }));
+      }
+    });
 
     ws.on("message", (message) => {
-      // Broadcast to all other clients for real-time collaboration
-      wss.clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-          client.send(message.toString());
+      try {
+        const data = JSON.parse(message.toString());
+        if (data.type === 'cursor') {
+          data.userId = id;
+          data.color = color;
         }
-      });
+        
+        // Broadcast to all other clients
+        wss.clients.forEach((client) => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(data));
+          }
+        });
+      } catch (e) {
+        wss.clients.forEach((client) => {
+          if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(message.toString());
+          }
+        });
+      }
     });
 
     ws.on("close", () => {
-      console.log("Client disconnected");
+      clients.delete(ws);
+      const remainingUsers = Array.from(clients.values());
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 'presence', users: remainingUsers }));
+        }
+      });
     });
   });
 }

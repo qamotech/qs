@@ -17,6 +17,11 @@ export interface SoundPreset {
   filterQ?: number;
   noiseColor?: 'white' | 'pink' | 'brown';
   attack?: number;
+  sustain?: number;
+  release?: number;
+  punch?: number;
+  unison?: number;
+  detune?: number;
 }
 
 export const SOUND_LIBRARY: SoundPreset[] = [];
@@ -40,7 +45,8 @@ const createSound = (name: string, category: SoundCategory, type: SoundPreset['t
 
 // Kick
 addPreset(createSound('Deep 808 Kick', 'Kick', 'osc', 50, 0.5, 36, { oscType: 'sine' }));
-addPreset(createSound('Punchy Kick', 'Kick', 'osc', 60, 0.3, 36, { oscType: 'sine', sweep: 0.1 }));
+addPreset(createSound('808 Glide Bass', 'Kick', 'osc', 40, 1.2, 36, { oscType: 'triangle', punch: 2, attack: 0.05, sustain: 0.8, release: 0.5 }));
+addPreset(createSound('Punchy Kick', 'Kick', 'osc', 60, 0.3, 36, { oscType: 'sine', sweep: 0.1, punch: 5 }));
 addPreset(createSound('Hard Dist Kick', 'Kick', 'osc', 55, 0.4, 36, { oscType: 'sawtooth', filterType: 'lowpass', filterFreq: 400 }));
 addPreset(createSound('Short Tight Kick', 'Kick', 'osc', 70, 0.2, 36, { oscType: 'sine' }));
 addPreset(createSound('Boom Kick', 'Kick', 'osc', 40, 0.7, 36, { oscType: 'sine' }));
@@ -54,6 +60,7 @@ addPreset(createSound('Layered Kick', 'Kick', 'osc', 52, 0.5, 36, { oscType: 'si
 
 // Snare
 addPreset(createSound('Classic Snare', 'Snare', 'noise', 200, 0.2, 38, { noiseColor: 'white', filterType: 'highpass', filterFreq: 1000 }));
+addPreset(createSound('909 Analog Clap', 'Snare', 'noise', 0, 0.3, 38, { noiseColor: 'white', filterType: 'bandpass', filterFreq: 1500, attack: 0.01, release: 0.2 }));
 addPreset(createSound('Tight Snare', 'Snare', 'noise', 250, 0.1, 38, { noiseColor: 'white', filterType: 'highpass', filterFreq: 1500 }));
 addPreset(createSound('Deep Snare', 'Snare', 'noise', 150, 0.3, 38, { noiseColor: 'pink', filterType: 'highpass', filterFreq: 500 }));
 addPreset(createSound('Rim Snare', 'Snare', 'osc', 400, 0.1, 38, { oscType: 'triangle' }));
@@ -96,6 +103,8 @@ addPreset(createSound('Guiro', 'Perc', 'osc', 600, 0.1, 72, { oscType: 'sawtooth
 
 // Synth
 addPreset(createSound('Saw Lead', 'Synth', 'osc', 440, 0.5, 60, { oscType: 'sawtooth' }));
+addPreset(createSound('Reese Bass', 'Synth', 'osc', 55, 0.8, 24, { oscType: 'sawtooth', unison: 3, detune: 15, filterType: 'lowpass', filterFreq: 600, filterQ: 2 }));
+addPreset(createSound('FM Glass Bell', 'Synth', 'fm', 800, 0.8, 72, { fmFreqRatio: 3.5, fmModIndex: 5, attack: 0.01, release: 1.0 }));
 addPreset(createSound('Square Bass', 'Synth', 'osc', 110, 0.6, 36, { oscType: 'square', filterType: 'lowpass', filterFreq: 800 }));
 addPreset(createSound('Pluck Synth', 'Synth', 'osc', 330, 0.2, 60, { oscType: 'triangle', filterType: 'lowpass', filterFreq: 1000 }));
 addPreset(createSound('Soft Pad', 'Synth', 'osc', 220, 1.0, 60, { oscType: 'sine', attack: 0.5 }));
@@ -138,6 +147,7 @@ addPreset(createSound('Saxophone Smooth', 'Brass', 'osc', 200, 0.9, 60, { oscTyp
 
 // FX
 addPreset(createSound('White Noise Sweep', 'FX', 'noise', 0, 1.0, 60, { noiseColor: 'white', filterType: 'lowpass', filterFreq: 1000, sweep: 5 }));
+addPreset(createSound('LoFi Vinyl Crackle', 'FX', 'noise', 0, 4.0, 60, { noiseColor: 'brown', filterType: 'highpass', filterFreq: 500, attack: 0.5, release: 1.0 }));
 addPreset(createSound('Explosion', 'FX', 'noise', 50, 2.0, 36, { noiseColor: 'brown', filterType: 'lowpass', filterFreq: 200 }));
 addPreset(createSound('SciFi Zap', 'FX', 'osc', 100, 0.2, 60, { oscType: 'square', sweep: 10 }));
 addPreset(createSound('Wind', 'FX', 'noise', 100, 2.0, 60, { noiseColor: 'pink', filterType: 'bandpass', filterFreq: 400 }));

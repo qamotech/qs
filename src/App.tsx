@@ -49,6 +49,9 @@ export default function App() {
   const { 
     project, 
     isPlaying,
+    activeUsers,
+    cursors,
+    broadcastCursor,
     togglePlay,
     saveProject, 
     resetProject, 
@@ -79,6 +82,7 @@ export default function App() {
     jumpTo,
     addTrack,
     removeTrack,
+    reorderTracks,
     copyTrack,
     pasteTrack,
     clearTrack,
@@ -237,7 +241,27 @@ export default function App() {
               }}
               transition={{ duration: 0.5 }}
               className="w-full h-full flex flex-col bg-app-gradient overflow-hidden relative electricity-border"
+              onMouseMove={(e) => broadcastCursor(e.clientX, e.clientY)}
             >
+              {/* Remote Cursors */}
+              {Object.entries(cursors).map(([id, cursor]) => (
+                <div 
+                  key={id}
+                  className="pointer-events-none fixed z-50 flex flex-col items-center"
+                  style={{ 
+                    left: cursor.x, 
+                    top: cursor.y,
+                    transform: 'translate(-50%, -10px)'
+                  }}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.5))' }}>
+                    <path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87a.5.5 0 0 0 .35-.85L5.5 3.21z" fill={cursor.color} stroke="white" strokeWidth="1.5"/>
+                  </svg>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-sm mt-1" style={{ backgroundColor: cursor.color }}>
+                    {id}
+                  </span>
+                </div>
+              ))}
               {/* Header / Top Bar */}
               <header className="h-16 shrink-0 border-b border-white/5 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md z-20 relative shadow-md">
               <div className="flex items-center gap-4">
@@ -245,6 +269,21 @@ export default function App() {
                     <AudioWaveform className="text-cyan-400 w-6 h-6 animate-pulse" />
                   </div>
                   <h2 className="text-xl font-black text-transparent bg-gradient-to-r from-zinc-200 to-zinc-500 bg-clip-text hidden lg:block tracking-widest">Qamelot</h2>
+                  
+                  {/* Collaboration Presence */}
+                  <div className="hidden md:flex items-center gap-1 ml-4 border-l border-zinc-800 pl-4">
+                    {activeUsers.map(user => (
+                      <div 
+                        key={user.id} 
+                        className="w-6 h-6 rounded-full border border-zinc-800 flex items-center justify-center text-[10px] font-bold text-white shadow-inner"
+                        style={{ backgroundColor: user.color }}
+                        title={user.id}
+                      >
+                        {user.id.charAt(0)}
+                      </div>
+                    ))}
+                    <div className="text-xs text-zinc-500 ml-2 font-mono">{activeUsers.length} Online</div>
+                  </div>
                 </div>
                 
                 {/* Transport Controls (Always Visible) */}
@@ -412,6 +451,7 @@ export default function App() {
                       deleteAllNotes={deleteAllNotes}
                       setStatus={setStatus}
                       onMaximize={() => setSequencerModalOpen(true)}
+                      onReorderTracks={reorderTracks}
                     />
                     
                     {/* PerformancePads expanded */}
@@ -559,6 +599,7 @@ export default function App() {
                 humanizeTiming={humanizeTiming}
                 deleteAllNotes={deleteAllNotes}
                 setStatus={setStatus}
+                onReorderTracks={reorderTracks}
               />
               <EnhancementsRack setStatus={setStatus} />
             </div>

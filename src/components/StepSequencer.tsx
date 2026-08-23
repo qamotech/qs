@@ -89,9 +89,12 @@ export default function StepSequencer({
   humanizeTiming: (idx: number) => void,
   deleteAllNotes: (idx: number) => void,
   setStatus: (status: string) => void,
-  onMaximize?: () => void
+  onMaximize?: () => void,
+  onReorderTracks: (start: number, end: number) => void
 }) {
   const [currentStep, setCurrentStep] = useState(0);
+  const [draggedTrackIdx, setDraggedTrackIdx] = useState<number | null>(null);
+  const [dragOverTrackIdx, setDragOverTrackIdx] = useState<number | null>(null);
   
   const workerRef = useRef<Worker | null>(null);
   const decayRef = useRef<number | null>(null);
@@ -120,7 +123,9 @@ export default function StepSequencer({
             }
 
             if (shouldPlay) {
-              audioEngine.playSound(trackIdx, trackSounds[trackIdx]);
+              // Upgrade 20: Groove Humanization (Velocity variation)
+              const velocity = 0.85 + (Math.random() * 0.3);
+              audioEngine.playSound(trackIdx, trackSounds[trackIdx], velocity);
               triggerPeak(trackIdx);
             }
           }
@@ -243,7 +248,38 @@ export default function StepSequencer({
 
       <div className="flex flex-col gap-2 relative bg-zinc-950 p-3 rounded-xl border border-zinc-800/80 shadow-[inset_0_4px_20px_rgba(0,0,0,0.5)]">
         {grid.map((track, trackIdx) => (
-          <div key={trackIdx} className="relative">
+          <div 
+            key={trackIdx} 
+            className={`relative transition-all duration-200 ${draggedTrackIdx === trackIdx ? 'opacity-50 scale-[0.98]' : ''} ${dragOverTrackIdx === trackIdx ? 'border-t-2 border-emerald-500 pt-2 -mt-2' : ''}`}
+            draggable
+            onDragStart={(e) => {
+              setDraggedTrackIdx(trackIdx);
+              e.dataTransfer.effectAllowed = 'move';
+              // Set a small transparent drag image or default
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              if (draggedTrackIdx !== null && draggedTrackIdx !== trackIdx) {
+                setDragOverTrackIdx(trackIdx);
+              }
+            }}
+            onDragLeave={() => {
+              if (dragOverTrackIdx === trackIdx) setDragOverTrackIdx(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (draggedTrackIdx !== null && draggedTrackIdx !== trackIdx) {
+                onReorderTracks(draggedTrackIdx, trackIdx);
+              }
+              setDraggedTrackIdx(null);
+              setDragOverTrackIdx(null);
+            }}
+            onDragEnd={() => {
+              setDraggedTrackIdx(null);
+              setDragOverTrackIdx(null);
+            }}
+          >
             <SequencerTrack
                 trackIdx={trackIdx}
                 steps={track}

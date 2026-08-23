@@ -80,6 +80,8 @@ export function useProject() {
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
+  const [activeUsers, setActiveUsers] = useState<{id: string, color: string}[]>([]);
+  const [cursors, setCursors] = useState<Record<string, { x: number, y: number, color: string }>>({});
 
   const updateHistoryState = useCallback(() => {
     setCanUndo(historyIndexRef.current > 0);
@@ -90,7 +92,7 @@ export function useProject() {
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}`;
+    const wsUrl = `${protocol}//${window.location.host}/api/ws`;
     const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
@@ -102,10 +104,18 @@ export function useProject() {
         const data = JSON.parse(event.data);
         if (data.type === 'update' && data.payload) {
           setProject(data.payload);
-          // Optional: Add to history or just update the view
           historyRef.current = [data.payload];
           historyIndexRef.current = 0;
           updateHistoryState();
+        } else if (data.type === 'presence') {
+          setActiveUsers(data.users);
+        } else if (data.type === 'cursor') {
+          setCursors(prev => ({
+            ...prev,
+            [data.userId]: { x: data.x, y: data.y, color: data.color }
+          }));
+        } else if (data.type === 'transport') {
+          setIsPlaying(data.isPlaying);
         }
       } catch (err) {
         console.error('Failed to parse WS message', err);
@@ -118,6 +128,12 @@ export function useProject() {
       ws.close();
     };
   }, [updateHistoryState]);
+
+  const broadcastCursor = useCallback((x: number, y: number) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'cursor', x, y }));
+    }
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('qamelot-project');
@@ -334,6 +350,29 @@ export function useProject() {
       const newSustain = p.trackSustain.filter((_, i) => i !== trackIdx);
       const newGrid = p.sequencerGrid.filter((_, i) => i !== trackIdx);
       return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackSounds: newSounds, trackCutSelf: newCutSelf, trackSustain: newSustain, sequencerGrid: newGrid };
+    });
+  }, [setProjectWithHistory]);
+
+  const reorderTracks = useCallback((startIndex: number, endIndex: number) => {
+    setProjectWithHistory(p => {
+      if (startIndex === endIndex) return p;
+      
+      const moveItem = <T>(arr: T[], from: number, to: number): T[] => {
+        const newArr = [...arr];
+        const [item] = newArr.splice(from, 1);
+        newArr.splice(to, 0, item);
+        return newArr;
+      };
+
+      return {
+        ...p,
+        trackMutes: moveItem(p.trackMutes, startIndex, endIndex),
+        trackSolos: moveItem(p.trackSolos, startIndex, endIndex),
+        trackSounds: moveItem(p.trackSounds, startIndex, endIndex),
+        trackCutSelf: moveItem(p.trackCutSelf, startIndex, endIndex),
+        trackSustain: moveItem(p.trackSustain, startIndex, endIndex),
+        sequencerGrid: moveItem(p.sequencerGrid, startIndex, endIndex)
+      };
     });
   }, [setProjectWithHistory]);
 
@@ -560,12 +599,21 @@ export function useProject() {
 
   const togglePlay = useCallback(() => {
     audioEngine.init();
-    setIsPlaying(prev => !prev);
+    setIsPlaying(prev => {
+      const next = !prev;
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'transport', isPlaying: next }));
+      }
+      return next;
+    });
   }, []);
 
   return {
     project,
     isPlaying,
+    activeUsers,
+    cursors,
+    broadcastCursor,
     togglePlay,
     saveProject,
     resetProject,
@@ -600,6 +648,7 @@ export function useProject() {
     canRedo,
     addTrack,
     removeTrack,
+    reorderTracks,
     copyTrack,
     pasteTrack,
     clearTrack,
