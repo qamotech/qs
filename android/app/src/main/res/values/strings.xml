@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Qamelot Media Studio</string>
+    <string name="title_activity_main">Qamelot Media Studio</string>
+    <string name="package_name">com.qamelot.media.studio</string>
+    <string name="custom_url_scheme">com.qamelot.media.studio</string>
+</resources>

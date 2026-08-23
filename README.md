@@ -1,11 +1,43 @@
-<div align="center">
+# Qamelot Media Studio
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Premastered HipHop, Pop & RnB audio production workstation featuring a step sequencer, sample packs, 5-band EQ, spatial panner, master effects, and an OLED-style oscilloscope.
 
-  <h1>Built with AI Studio</h2>
+Originally built with [Google AI Studio](https://ai.studio/apps/38175002-35cb-4ce5-83e5-e855bfa39b84).
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Stack
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+- React 19 + TypeScript
+- Vite 8
+- Tailwind CSS 4
+- Framer Motion + Lucide icons
+- Web Audio API (client-side synthesis, no backend required)
 
-</div>
+## Run locally
+
+**Prerequisites:** Node.js 18+
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+Optional: copy `.env.example` to `.env.local` if you add Gemini-powered features later.
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start dev server on port 3000 |
+| `npm run build` | Typecheck + production build |
+| `npm run preview` | Preview production build |
+| `npm run typecheck` | TypeScript only |
+
+## Controls
+
+- **Space** — play / stop
+- **Ctrl/Cmd+S** — save project (localStorage)
+- **Ctrl/Cmd+Z** — undo
+- **Ctrl/Cmd+Y** or **Ctrl/Cmd+Shift+Z** — redo
+- **Ctrl/Cmd+Shift+R** — reset project
