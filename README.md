@@ -1,43 +1,73 @@
-# Qamelot Media Studio
+# Qamelot Studio
 
-Premastered HipHop, Pop & RnB audio production workstation featuring a step sequencer, sample packs, 5-band EQ, spatial panner, master effects, and an OLED-style oscilloscope.
+**Qamelot Studio** is a professional-grade, premastered audio production workstation designed for HipHop, Pop, and RnB. It provides a browser-based, high-performance environment for beat-making, sound design, and master-level processing.
 
 Originally built with [Google AI Studio](https://ai.studio/apps/38175002-35cb-4ce5-83e5-e855bfa39b84).
 
-## Stack
+![Qamelot Studio UI](assets/screenshot.png) *(Note: Add your own screenshot to assets/screenshot.png)*
 
-- React 19 + TypeScript
-- Vite 8
-- Tailwind CSS 4
-- Framer Motion + Lucide icons
-- Web Audio API (client-side synthesis, no backend required)
+## 🚀 Key Features
 
-## Run locally
+### 🥁 Creative Sequencing
+- **16-Step Sequencer**: Precision grid with per-track volume, mute/solo, and customizable sounds.
+- **AI Beatbox & Riff Generator**: Generate instant inspiration using intelligent randomization algorithms.
+- **Chord Generator**: Drag-and-drop harmonic structures directly into your tracks.
+- **Performance Pads**: Real-time triggering for live improvisation.
 
-**Prerequisites:** Node.js 18+
+### 🎛️ Master-Grade Processing
+- **5-Band Master EQ**: Shape your final sound with surgical precision.
+- **Master Effects**: Integrated Reverb Chamber, Delay, and resonant Filters.
+- **Advanced Dynamics**: Multiband Compressor, Master Limiter, and Tape Saturation for that "warm" professional finish.
+- **24-Enhancement Rack**: A comprehensive suite of analog-style enhancements (Tube, Crunch, Excite, Air, etc.).
 
+### 🔊 Spatial & Monitoring
+- **Spatial Panner**: Position your tracks in a 2D soundstage for wide, immersive mixes.
+- **OLED-Style Oscilloscope**: Real-time waveform visualization.
+- **Spectral Analyzer**: High-resolution frequency distribution monitoring.
+
+## 🛠️ Tech Stack
+
+- **Framework**: React 19 + TypeScript
+- **Bundler**: Vite 8
+- **Styling**: Tailwind CSS 4
+- **Animation**: Framer Motion
+- **Icons**: Lucide React
+- **Audio Engine**: Web Audio API (Client-side synthesis and processing)
+
+## 📦 Getting Started
+
+### Prerequisites
+- Node.js 18+
+
+### Installation
 ```bash
 npm install
-npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+### Development
+```bash
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) to start producing.
 
-Optional: copy `.env.example` to `.env.local` if you add Gemini-powered features later.
+### Production Build
+```bash
+npm run build
+npm run preview
+```
 
-## Scripts
+## ⌨️ Controls & Shortcuts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start dev server on port 3000 |
-| `npm run build` | Typecheck + production build |
-| `npm run preview` | Preview production build |
-| `npm run typecheck` | TypeScript only |
+| Action | Shortcut |
+|--------|----------|
+| **Play / Stop** | `Space` |
+| **Save Project** | `Ctrl/Cmd + S` |
+| **Undo** | `Ctrl/Cmd + Z` |
+| **Redo** | `Ctrl/Cmd + Y` or `Ctrl/Cmd + Shift + Z` |
+| **Reset Project** | `Ctrl/Cmd + Shift + R` |
 
-## Controls
+## 📱 Mobile & Android Support
+Qamelot includes a Capacitor-based Android wrapper located in the `android/` directory, allowing for a native-like experience on mobile devices with hardware-accelerated audio.
 
-- **Space** — play / stop
-- **Ctrl/Cmd+S** — save project (localStorage)
-- **Ctrl/Cmd+Z** — undo
-- **Ctrl/Cmd+Y** or **Ctrl/Cmd+Shift+Z** — redo
-- **Ctrl/Cmd+Shift+R** — reset project
+## 📄 License
+MIT

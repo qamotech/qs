@@ -1,6 +1,5 @@
 import React from 'react';
 import { SOUND_LIBRARY } from '../audio/SoundLibrary';
-import { VolumeX, Headphones, X, Shuffle } from 'lucide-react';
 import SequencerStep from './SequencerStep';
 
 interface SequencerTrackProps {

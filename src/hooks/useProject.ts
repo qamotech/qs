@@ -1,7 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { audioEngine } from '../audio/AudioEngine';
 
-export const DEFAULT_GRID = Array(4).fill(null).map(() => Array(16).fill(false));
+const ISLAND_GRID = [
+  [true, false, false, true, false, false, true, false, true, false, false, true, false, true, false, false],
+  [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false],
+  [true, false, true, true, false, true, false, true, true, false, true, false, false, true, false, true],
+  [false, false, true, false, false, true, false, true, false, false, true, false, true, false, true, false],
+  [true, false, false, false, false, false, true, false, true, false, false, false, false, false, true, false],
+  [false, false, false, true, false, false, false, false, false, false, true, false, false, false, false, true],
+];
+
+export const DEFAULT_GRID = ISLAND_GRID.map(track => [...track]);
 
 export interface ProjectData {
   activePack: string;
@@ -14,6 +23,8 @@ export interface ProjectData {
   trackSolos: boolean[];
   trackVolumes: number[];
   trackSounds: string[];
+  trackNames: string[];
+  trackColors: string[];
   filterType: 'lowpass' | 'highpass' | 'bandpass';
   sequencerGrid: boolean[][];
   synthParams: {
@@ -27,27 +38,57 @@ export interface ProjectData {
 }
 
 const DEFAULT_PROJECT: ProjectData = {
-  activePack: 'classic-hiphop',
-  bpm: 100,
-  volume: 80,
-  swing: 0,
-  reverb: 0,
-  delay: 0,
-  trackMutes: [false, false, false, false],
-  trackSolos: [false, false, false, false],
-  trackVolumes: [80, 80, 80, 80],
-  trackSounds: ['classic-kick', 'classic-snare', 'classic-hihat', 'saw-bass'],
+  activePack: 'rnb-grooves',
+  bpm: 98,
+  volume: 78,
+  swing: 18,
+  reverb: 14,
+  delay: 9,
+  trackMutes: Array(6).fill(false),
+  trackSolos: Array(6).fill(false),
+  trackVolumes: [88, 74, 57, 64, 72, 48],
+  trackSounds: ['deep-kick', 'classic-clap', 'shaker', 'conga-low', '808-sub', 'dream-pluck'],
+  trackNames: ['Island Kick', 'Palm Clap', 'Shaker', 'Conga', 'Sub Bass', 'Tropical Pluck'],
+  trackColors: ['#22c55e', '#fb7185', '#facc15', '#f97316', '#8b5cf6', '#38bdf8'],
   filterType: 'lowpass',
   sequencerGrid: DEFAULT_GRID,
-  synthParams: { cutoff: 70, resonance: 30, envMod: 50, decay: 40 },
-  eqLevels: [50, 60, 40, 70, 50],
-  pannerPosition: { x: 50, y: 50 }
+  synthParams: { cutoff: 62, resonance: 22, envMod: 44, decay: 58 },
+  eqLevels: [72, 59, 48, 56, 61],
+  pannerPosition: { x: 56, y: 48 }
 };
 
 const MAX_HISTORY = 50;
 
 // EQ UI uses 0–100 with 50 = 0 dB (see AudioEngine.setEqLevels)
 const dbToEqLevel = (db: number) => Math.max(0, Math.min(100, 50 + (db / 12) * 50));
+
+const cloneProject = (project: ProjectData): ProjectData => ({
+  ...project,
+  trackMutes: [...project.trackMutes], trackSolos: [...project.trackSolos],
+  trackVolumes: [...project.trackVolumes], trackSounds: [...project.trackSounds],
+  trackNames: [...project.trackNames], trackColors: [...project.trackColors],
+  sequencerGrid: project.sequencerGrid.map(track => [...track]),
+  synthParams: { ...project.synthParams }, eqLevels: [...project.eqLevels],
+  pannerPosition: { ...project.pannerPosition },
+});
+
+const normalizeProject = (saved: Partial<ProjectData>): ProjectData => {
+  const base = cloneProject(DEFAULT_PROJECT);
+  const trackCount = Array.isArray(saved.sequencerGrid) && saved.sequencerGrid.length > 0 ? saved.sequencerGrid.length : base.sequencerGrid.length;
+  const extend = <T,>(values: T[] | undefined, fallback: T[]) => Array.from({ length: trackCount }, (_, index) => values?.[index] ?? fallback[index % fallback.length]);
+  const normalizeGrid = (track: boolean[] | undefined, fallback: boolean[]) => {
+    if (!track) return [...fallback];
+    return [...track.slice(0, 16), ...Array(Math.max(0, 16 - track.length)).fill(false)];
+  };
+  return {
+    ...base,
+    ...saved,
+    trackMutes: extend(saved.trackMutes, base.trackMutes), trackSolos: extend(saved.trackSolos, base.trackSolos),
+    trackVolumes: extend(saved.trackVolumes, base.trackVolumes), trackSounds: extend(saved.trackSounds, base.trackSounds),
+    trackNames: extend(saved.trackNames, base.trackNames), trackColors: extend(saved.trackColors, base.trackColors),
+    sequencerGrid: Array.from({ length: trackCount }, (_, index) => normalizeGrid(saved.sequencerGrid?.[index], base.sequencerGrid[index % base.sequencerGrid.length])),
+  };
+};
 
 export function useProject() {
   const [project, setProject] = useState<ProjectData>(DEFAULT_PROJECT);
@@ -69,8 +110,9 @@ export function useProject() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setProject({ ...DEFAULT_PROJECT, ...parsed });
-        historyRef.current = [{ ...DEFAULT_PROJECT, ...parsed }];
+        const restored = normalizeProject(parsed);
+        setProject(restored);
+        historyRef.current = [restored];
         historyIndexRef.current = 0;
         updateHistoryState();
       } catch (e) {
@@ -121,8 +163,9 @@ export function useProject() {
   
   const resetProject = useCallback(() => {
     if (window.confirm('Are you sure you want to reset the project? All unsaved changes will be lost.')) {
-      setProject(DEFAULT_PROJECT);
-      historyRef.current = [DEFAULT_PROJECT];
+      const islandProject = cloneProject(DEFAULT_PROJECT);
+      setProject(islandProject);
+      historyRef.current = [islandProject];
       historyIndexRef.current = 0;
       updateHistoryState();
       localStorage.removeItem('qamelot-project');
@@ -210,14 +253,32 @@ export function useProject() {
     });
   }, [setProjectWithHistory]);
 
+  const updateTrackName = useCallback((trackIdx: number, name: string) => {
+    setProjectWithHistory(p => {
+      const trackNames = [...p.trackNames];
+      trackNames[trackIdx] = name.trim() || `Track ${trackIdx + 1}`;
+      return { ...p, trackNames };
+    });
+  }, [setProjectWithHistory]);
+
+  const updateTrackColor = useCallback((trackIdx: number, color: string) => {
+    setProjectWithHistory(p => {
+      const trackColors = [...p.trackColors];
+      trackColors[trackIdx] = color;
+      return { ...p, trackColors };
+    });
+  }, [setProjectWithHistory]);
+
   const addTrack = useCallback(() => {
     setProjectWithHistory(p => {
       const newMutes = [...p.trackMutes, false];
       const newSolos = [...p.trackSolos, false];
       const newVolumes = [...(p.trackVolumes || []), 80];
       const newSounds = [...p.trackSounds, 'classic-perc'];
+      const newNames = [...p.trackNames, `Track ${p.trackSounds.length + 1}`];
+      const newColors = [...p.trackColors, '#22c55e'];
       const newGrid = [...p.sequencerGrid, Array(16).fill(false)];
-      return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackVolumes: newVolumes, trackSounds: newSounds, sequencerGrid: newGrid };
+      return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackVolumes: newVolumes, trackSounds: newSounds, trackNames: newNames, trackColors: newColors, sequencerGrid: newGrid };
     });
   }, [setProjectWithHistory]);
 
@@ -228,8 +289,10 @@ export function useProject() {
       const newSolos = p.trackSolos.filter((_, i) => i !== trackIdx);
       const newVolumes = (p.trackVolumes || []).filter((_, i) => i !== trackIdx);
       const newSounds = p.trackSounds.filter((_, i) => i !== trackIdx);
+      const newNames = p.trackNames.filter((_, i) => i !== trackIdx);
+      const newColors = p.trackColors.filter((_, i) => i !== trackIdx);
       const newGrid = p.sequencerGrid.filter((_, i) => i !== trackIdx);
-      return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackVolumes: newVolumes, trackSounds: newSounds, sequencerGrid: newGrid };
+      return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackVolumes: newVolumes, trackSounds: newSounds, trackNames: newNames, trackColors: newColors, sequencerGrid: newGrid };
     });
   }, [setProjectWithHistory]);
 
@@ -313,6 +376,24 @@ export function useProject() {
       const newVolumes = [...(p.trackVolumes || [])];
       newVolumes[trackIdx] = volume;
       return { ...p, trackVolumes: newVolumes };
+    });
+  }, [setProjectWithHistory]);
+
+  const moveTrack = useCallback((trackIdx: number, direction: -1 | 1) => {
+    setProjectWithHistory(p => {
+      const destination = trackIdx + direction;
+      if (destination < 0 || destination >= p.trackSounds.length) return p;
+      const move = <T,>(items: T[]) => {
+        const next = [...items];
+        [next[trackIdx], next[destination]] = [next[destination], next[trackIdx]];
+        return next;
+      };
+      return {
+        ...p,
+        sequencerGrid: move(p.sequencerGrid), trackSounds: move(p.trackSounds),
+        trackMutes: move(p.trackMutes), trackSolos: move(p.trackSolos),
+        trackVolumes: move(p.trackVolumes), trackNames: move(p.trackNames), trackColors: move(p.trackColors),
+      };
     });
   }, [setProjectWithHistory]);
 
@@ -471,6 +552,26 @@ export function useProject() {
     });
   }, [setProjectWithHistory]);
 
+  const loadIslandBeat = useCallback(() => {
+    const islandProject = cloneProject(DEFAULT_PROJECT);
+    setProjectWithHistory(() => islandProject);
+  }, [setProjectWithHistory]);
+
+  const humanizeIslandBeat = useCallback(() => {
+    setProjectWithHistory(p => {
+      const sequencerGrid = p.sequencerGrid.map(track => [...track]);
+      const addGhostNote = (trackIndex: number, candidates: number[]) => {
+        if (!sequencerGrid[trackIndex]) return;
+        const available = candidates.filter(step => !sequencerGrid[trackIndex][step]);
+        if (available.length) sequencerGrid[trackIndex][available[Math.floor(Math.random() * available.length)]] = true;
+      };
+      addGhostNote(2, [1, 5, 9, 13, 15]);
+      addGhostNote(3, [0, 3, 6, 10, 14]);
+      if (sequencerGrid[5] && Math.random() > 0.35) addGhostNote(5, [2, 7, 12]);
+      return { ...p, sequencerGrid };
+    });
+  }, [setProjectWithHistory]);
+
   const togglePlay = useCallback(() => {
     audioEngine.init();
     setIsPlaying(prev => !prev);
@@ -492,6 +593,9 @@ export function useProject() {
     toggleTrackSolo,
     updateTrackVolume,
     updateTrackSound,
+    updateTrackName,
+    updateTrackColor,
+    moveTrack,
     updateFilterType,
     updateSequencerGrid,
     updateSynthParams,
@@ -499,6 +603,8 @@ export function useProject() {
     updatePannerPosition,
     applyMasterPreset,
     generateRandomPattern,
+    loadIslandBeat,
+    humanizeIslandBeat,
     undo,
     redo,
     canUndo,

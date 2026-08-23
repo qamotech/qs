@@ -15,6 +15,11 @@ export default function StepSequencer({
   onToggleSolo,
   trackSounds,
   onTrackSoundChange,
+  trackNames,
+  trackColors,
+  onTrackNameChange,
+  onTrackColorChange,
+  moveTrack,
   addTrack,
   removeTrack,
   copyTrack,
@@ -45,6 +50,11 @@ export default function StepSequencer({
   onTrackVolumeChange: (idx: number, vol: number) => void,
   trackSounds: string[],
   onTrackSoundChange: (idx: number, soundId: string) => void,
+  trackNames: string[],
+  trackColors: string[],
+  onTrackNameChange: (idx: number, name: string) => void,
+  onTrackColorChange: (idx: number, color: string) => void,
+  moveTrack: (idx: number, direction: -1 | 1) => void,
   
   addTrack: () => void,
   removeTrack: (idx: number) => void,
@@ -68,6 +78,7 @@ export default function StepSequencer({
   const [stepEditor, setStepEditor] = useState<{ trackIdx: number, stepIdx: number, x: number, y: number } | null>(null);
 
   const [drawState, setDrawState] = useState<{ isDrawing: boolean, value: boolean }>({ isDrawing: false, value: true });
+  const [trackEditor, setTrackEditor] = useState<number | null>(null);
 
   useEffect(() => {
     const handleGlobalMouseUp = () => setDrawState({ isDrawing: false, value: true });
@@ -224,8 +235,8 @@ export default function StepSequencer({
                   }
                 }}
               >
-                <span className="text-[10px] font-bold text-zinc-300 truncate w-full" title={SOUND_LIBRARY.find(s => s.id === trackSounds[trackIdx])?.name || 'Sound'}>
-                  {SOUND_LIBRARY.find(s => s.id === trackSounds[trackIdx])?.name || 'Sound'}
+                <span className="text-[10px] font-bold truncate w-full" style={{ color: trackColors[trackIdx] || '#d4d4d8' }} title={trackNames[trackIdx] || SOUND_LIBRARY.find(s => s.id === trackSounds[trackIdx])?.name || 'Sound'}>
+                  {trackNames[trackIdx] || SOUND_LIBRARY.find(s => s.id === trackSounds[trackIdx])?.name || 'Sound'}
                 </span>
               </div>
               <div className="flex items-center gap-1 shrink-0">
@@ -340,6 +351,10 @@ export default function StepSequencer({
           <div className="px-2 py-1 text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-zinc-800 mb-1">
             Track Options
           </div>
+          <button onClick={() => { setTrackEditor(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-cyan-300 hover:bg-zinc-800 rounded">Edit Track</button>
+          <button onClick={() => { setEditingTrack(contextMenu.trackIdx); setSearchQuery(''); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 rounded">Change Notes / Sound</button>
+          <button onClick={() => { moveTrack(contextMenu.trackIdx, -1); setContextMenu(null); }} disabled={contextMenu.trackIdx === 0} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 disabled:text-zinc-700 hover:bg-zinc-800 rounded">Move Track Up</button>
+          <button onClick={() => { moveTrack(contextMenu.trackIdx, 1); setContextMenu(null); }} disabled={contextMenu.trackIdx === grid.length - 1} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 disabled:text-zinc-700 hover:bg-zinc-800 rounded">Move Track Down</button>
           <button onClick={() => { copyTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">Copy Track</button>
           <button onClick={() => { pasteTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">Paste Track</button>
           <button onClick={() => { clearTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">Clear Pattern</button>
@@ -352,6 +367,17 @@ export default function StepSequencer({
           <button onClick={() => { onToggleSolo(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">{trackSolos[contextMenu.trackIdx] ? 'Unsolo' : 'Solo'} Track</button>
           <div className="h-px bg-zinc-800 my-1" />
           <button onClick={() => { removeTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded">Remove Track</button>
+        </div>
+      )}
+      {trackEditor !== null && (
+        <div className="fixed inset-0 z-[110] bg-black/60 flex items-center justify-center p-4" onClick={() => setTrackEditor(null)}>
+          <div className="w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-xl p-5 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h4 className="font-bold text-zinc-100">Edit Track</h4>
+            <label className="block text-xs text-zinc-400">Track name<input autoFocus defaultValue={trackNames[trackEditor] || `Track ${trackEditor + 1}`} onBlur={(e) => onTrackNameChange(trackEditor, e.target.value)} className="mt-1 w-full rounded bg-zinc-800 border border-zinc-700 p-2 text-zinc-100" /></label>
+            <label className="block text-xs text-zinc-400">Track color<input type="color" value={trackColors[trackEditor] || '#22c55e'} onChange={(e) => onTrackColorChange(trackEditor, e.target.value)} className="mt-1 h-10 w-full rounded bg-zinc-800 border border-zinc-700 p-1" /></label>
+            <label className="block text-xs text-zinc-400">Track volume<input type="range" min="0" max="100" value={trackVolumes[trackEditor] ?? 80} onChange={(e) => onTrackVolumeChange(trackEditor, Number(e.target.value))} className="mt-1 w-full" /></label>
+            <button onClick={() => setTrackEditor(null)} className="w-full rounded bg-cyan-500 py-2 font-bold text-white">Done</button>
+          </div>
         </div>
       )}
       {stepEditor && (

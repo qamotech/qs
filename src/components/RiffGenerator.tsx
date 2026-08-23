@@ -1,8 +1,19 @@
-import { useState } from 'react';
-import { Sparkles, Dices, Music, Wand2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Sparkles, Dices, Music, Wand2, Mic, Square, Download } from 'lucide-react';
 
 export default function RiffGenerator({ onGenerate }: { onGenerate?: () => void }) {
   const [generating, setGenerating] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => () => {
+    recorderRef.current?.stop();
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+  }, [recordingUrl]);
 
   const generateRiff = () => {
     setGenerating(true);
@@ -11,6 +22,46 @@ export default function RiffGenerator({ onGenerate }: { onGenerate?: () => void 
       setGenerating(false);
       if (onGenerate) onGenerate();
     }, 1000);
+  };
+
+  const stopRecording = () => recorderRef.current?.stop();
+
+  const recordRiff = async () => {
+    if (isRecording) {
+      stopRecording();
+      return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setRecordingError('Audio recording is not supported in this browser.');
+      return;
+    }
+
+    try {
+      setRecordingError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      streamRef.current = stream;
+      recorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+        setRecordingUrl(URL.createObjectURL(blob));
+        stream.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+        recorderRef.current = null;
+        setIsRecording(false);
+      };
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      setRecordingError('Microphone access is required to record a riff.');
+    }
   };
 
   return (
@@ -65,6 +116,22 @@ export default function RiffGenerator({ onGenerate }: { onGenerate?: () => void 
           )}
           <span>{generating ? 'Generating...' : 'Roll Riff'}</span>
         </button>
+      </div>
+      <div className="mt-3 space-y-2 relative z-10">
+        <button
+          onClick={recordRiff}
+          className={`w-full rounded p-2 text-xs font-bold flex items-center justify-center gap-2 transition-colors ${isRecording ? 'bg-red-500 hover:bg-red-400 text-white animate-pulse' : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700'}`}
+        >
+          {isRecording ? <Square className="w-4 h-4 fill-current" /> : <Mic className="w-4 h-4" />}
+          {isRecording ? 'Stop & Save Riff' : 'Record Riff'}
+        </button>
+        {recordingError && <p className="text-xs text-red-400">{recordingError}</p>}
+        {recordingUrl && (
+          <div className="flex items-center gap-2">
+            <audio controls src={recordingUrl} className="min-w-0 flex-1 h-8" />
+            <a href={recordingUrl} download="qamelot-riff.webm" className="p-2 rounded bg-cyan-500 text-white" title="Download recorded riff"><Download className="w-4 h-4" /></a>
+          </div>
+        )}
       </div>
     </div>
   );

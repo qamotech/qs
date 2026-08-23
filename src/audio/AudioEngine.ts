@@ -253,8 +253,22 @@ export class AudioEngine {
       const bufferSize = this.ctx.sampleRate * Math.max(decay + attack, 0.5);
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
+      let brownSample = 0;
+      let pinkRows = Array.from({ length: 7 }, () => 0);
+
       for (let i = 0; i < bufferSize; i++) {
-          data[i] = Math.random() * 2 - 1;
+        const white = Math.random() * 2 - 1;
+
+        if (preset.noiseColor === 'brown') {
+          brownSample = (brownSample + 0.02 * white) / 1.02;
+          data[i] = brownSample * 3.5;
+        } else if (preset.noiseColor === 'pink') {
+          const row = Math.floor(Math.random() * pinkRows.length);
+          pinkRows[row] = white;
+          data[i] = pinkRows.reduce((sum, value) => sum + value, 0) / pinkRows.length;
+        } else {
+          data[i] = white;
+        }
       }
       const noise = this.ctx.createBufferSource();
       noise.buffer = buffer;

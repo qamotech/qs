@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Music, Loader2, Play, Square } from 'lucide-react';
+import { Music, Loader2 } from 'lucide-react';
 
 export default function MusicGenerator() {
   const [genre, setGenre] = useState('Lo-fi Hip Hop');

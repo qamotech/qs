@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Save, Play, Square } from 'lucide-react';
+import { Save, Play, Square, Palmtree, Shuffle } from 'lucide-react';
 
 import { useProject } from './hooks/useProject';
 import { audioEngine } from './audio/AudioEngine';
-import { SpectralAnalyzer, MasterLimiter, TapeSaturation, MultiBandCompressor, ReverbChamber, ChordGenerator, EnhancementsRack } from './components/NewFeatures';
+import { SpectralAnalyzer, MasterLimiter, TapeSaturation, MultiBandCompressor, ReverbChamber, ChordGenerator } from './components/NewFeatures';
 
 import StepSequencer from './components/StepSequencer';
 import PerformancePads from './components/PerformancePads';
@@ -39,8 +39,13 @@ export default function App() {
     toggleTrackSolo,
     updateTrackVolume,
     updateTrackSound,
+    updateTrackName,
+    updateTrackColor,
+    moveTrack,
     updateFilterType,
     generateRandomPattern,
+    loadIslandBeat,
+    humanizeIslandBeat,
     undo,
     redo,
     addTrack,
@@ -93,21 +98,20 @@ export default function App() {
   }, [started, togglePlay, saveProject, resetProject, undo, redo]);
 
   return (
-    <div className="fixed inset-0 bg-black text-zinc-300 font-mono flex flex-col relative overflow-hidden box-border">
+    <div className="w-full h-full min-h-screen bg-[#0a0a0c] text-zinc-300 font-mono flex flex-col overflow-hidden relative">
       {!started ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-black">
-          <div className="flex flex-col items-center justify-center max-w-lg w-full border border-zinc-800/50 bg-zinc-900/40 p-12 rounded-3xl shadow-2xl backdrop-blur-xl relative z-10">
-            <div className="w-64 h-64 mb-8 rounded-2xl flex items-center justify-center relative group">
-              <div className="absolute inset-0 bg-cyan-500/20 blur-3xl group-hover:bg-cyan-500/40 transition-colors duration-1000" />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+          <div className="flex flex-col items-center justify-center max-w-lg w-full border border-zinc-800/50 bg-zinc-900/40 p-8 md:p-12 rounded-3xl shadow-2xl relative z-10">
+            <div className="w-48 h-48 md:w-64 md:h-64 mb-8 flex items-center justify-center relative group">
+              <div className="absolute inset-0 bg-cyan-500/10 blur-3xl group-hover:bg-cyan-500/20 transition-colors duration-1000" />
               <img
                 src={logo}
                 alt="Qamelot Logo"
-                className="w-full h-full object-contain relative z-10 drop-shadow-[0_0_30px_rgba(6,182,212,0.6)] animate-pulse"
-                style={{ animationDuration: '4s' }}
+                className="w-full h-full object-contain relative z-10 drop-shadow-[0_0_20px_rgba(6,182,212,0.4)]"
               />
             </div>
-            <h1 className="text-5xl font-black text-white mb-4 text-center tracking-tighter">Qamelot Studio</h1>
-            <p className="text-zinc-400 text-center mb-12 text-lg font-light tracking-wide max-w-sm">
+            <h1 className="text-4xl md:text-5xl font-black text-white mb-4 text-center tracking-tighter">Qamelot Studio</h1>
+            <p className="text-zinc-400 text-center mb-10 text-base md:text-lg font-light tracking-wide max-w-sm">
               Audio Production Workstation
             </p>
             <button
@@ -115,7 +119,7 @@ export default function App() {
                 audioEngine.init();
                 setStarted(true);
               }}
-              className="w-full py-5 bg-zinc-100 hover:bg-white text-black rounded-2xl font-bold text-lg transition-all"
+              className="w-full py-4 md:py-5 bg-white hover:bg-zinc-100 text-black rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition-all"
             >
               Initialize Engine
             </button>
@@ -141,6 +145,12 @@ export default function App() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button onClick={loadIslandBeat} className="hidden lg:flex items-center gap-1.5 p-2 px-3 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 font-bold text-xs" title="Restore the tuned island beat">
+                <Palmtree className="w-4 h-4" /> Island Beat
+              </button>
+              <button onClick={humanizeIslandBeat} className="hidden md:flex items-center gap-1.5 p-2 px-3 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 font-bold text-xs" title="Add subtle percussion and accent variation">
+                <Shuffle className="w-4 h-4" /> Humanize
+              </button>
               <button onClick={saveProject} className="p-1.5 md:p-2 md:px-4 bg-cyan-500 hover:bg-cyan-400 rounded-lg text-white font-bold"><Save className="w-4 h-4" /></button>
             </div>
           </header>
@@ -161,6 +171,11 @@ export default function App() {
                 onTrackVolumeChange={updateTrackVolume}
                 trackSounds={project.trackSounds}
                 onTrackSoundChange={updateTrackSound}
+                trackNames={project.trackNames}
+                trackColors={project.trackColors}
+                onTrackNameChange={updateTrackName}
+                onTrackColorChange={updateTrackColor}
+                moveTrack={moveTrack}
                 addTrack={addTrack}
                 removeTrack={removeTrack}
                 copyTrack={copyTrack}
@@ -173,17 +188,16 @@ export default function App() {
                 fillEveryFourth={fillEveryFourth}
                 applyChord={applyChord}
               />
+              <ChordGenerator />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PerformancePads />
                 <RiffGenerator onGenerate={generateRandomPattern} />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <SynthTweaker params={project.synthParams} onChange={updateSynthParams} />
-                <ChordGenerator />
               </div>
             </div>
             <div className="xl:col-span-4 flex flex-col gap-6 xl:border-l border-zinc-800/50 xl:pl-6">
-              <EnhancementsRack />
               <MasterEq levels={project.eqLevels} onChange={updateEqLevels} />
               <MultiBandCompressor />
               <TapeSaturation />

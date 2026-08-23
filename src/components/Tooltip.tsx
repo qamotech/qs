@@ -11,18 +11,20 @@ export default function Tooltip({
   shortcut?: string; 
 }) {
   const [show, setShow] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleMouseEnter = () => {
     timeoutRef.current = setTimeout(() => setShow(true), 500);
   };
 
   const handleMouseLeave = () => {
-    clearTimeout(timeoutRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setShow(false);
   };
 
-  useEffect(() => () => clearTimeout(timeoutRef.current), []);
+  useEffect(() => () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }, []);
 
   return (
     <div className="relative inline-block" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
