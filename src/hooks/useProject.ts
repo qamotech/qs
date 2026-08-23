@@ -160,6 +160,15 @@ export function useProject() {
   const saveProject = useCallback(() => {
     localStorage.setItem('qamelot-project', JSON.stringify(project));
   }, [project]);
+  const loadProjectData = useCallback((data: unknown) => {
+    if (data && typeof data === 'object') {
+      const restored = normalizeProject(data as Partial<ProjectData>);
+      setProject(restored);
+      historyRef.current = [restored];
+      historyIndexRef.current = 0;
+      updateHistoryState();
+    }
+  }, [updateHistoryState]);
   
   const resetProject = useCallback(() => {
     if (window.confirm('Are you sure you want to reset the project? All unsaved changes will be lost.')) {
@@ -582,6 +591,7 @@ export function useProject() {
     isPlaying,
     togglePlay,
     saveProject,
+    loadProjectData,
     resetProject,
     updateActivePack,
     updateBpm,

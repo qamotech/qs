@@ -75,3 +75,6 @@ local.properties
 .externalNativeBuild/
 /captures/
 debug.keystore
+
+# --- Agent workspace artifacts ---
+.artifacts/

@@ -3,6 +3,13 @@ import { ListMusic, Search } from 'lucide-react';
 import { audioEngine } from '../audio/AudioEngine';
 import { SOUND_LIBRARY } from '../audio/SoundLibrary';
 
+type ProStep = { velocity: number; pitch: number; chance: number; ratchet: number };
+type ProSettings = { trackLengths?: number[]; trackSwing?: number[]; stepData?: ProStep[][] };
+const PRO_STORAGE_KEY = 'qamelot-sequencer-pro';
+const readProSettings = (): ProSettings => {
+  try { return JSON.parse(localStorage.getItem(PRO_STORAGE_KEY) || '{}'); } catch { return {}; }
+};
+
 export default function StepSequencer({ 
   grid, 
   onGridChange,
@@ -79,6 +86,13 @@ export default function StepSequencer({
 
   const [drawState, setDrawState] = useState<{ isDrawing: boolean, value: boolean }>({ isDrawing: false, value: true });
   const [trackEditor, setTrackEditor] = useState<number | null>(null);
+  const [proSettings, setProSettings] = useState<ProSettings>(readProSettings);
+
+  useEffect(() => {
+    const refresh = () => setProSettings(readProSettings());
+    window.addEventListener('qamelot-sequencer-pro-change', refresh);
+    return () => window.removeEventListener('qamelot-sequencer-pro-change', refresh);
+  }, []);
 
   useEffect(() => {
     const handleGlobalMouseUp = () => setDrawState({ isDrawing: false, value: true });
@@ -106,7 +120,10 @@ export default function StepSequencer({
         
         // Play sounds for the current step
         grid.forEach((track, trackIdx) => {
-          if (track[step]) {
+          const trackLength = Math.max(1, Math.min(16, proSettings.trackLengths?.[trackIdx] ?? 16));
+          const localStep = step % trackLength;
+          const proStep = proSettings.stepData?.[trackIdx]?.[localStep] ?? { velocity: 100, pitch: 0, chance: 100, ratchet: 1 };
+          if (track[localStep] && Math.random() * 100 <= proStep.chance) {
             const isMuted = trackMutes[trackIdx];
             const isSoloed = trackSolos[trackIdx];
             
@@ -118,7 +135,12 @@ export default function StepSequencer({
             }
 
             if (shouldPlay) {
-              audioEngine.playSound(trackIdx, trackSounds[trackIdx]);
+              const velocity = proStep.velocity / 127;
+              const repeats = Math.max(1, Math.min(4, proStep.ratchet));
+              const baseDelay = 60000 / (bpm * 4);
+              for (let repeat = 0; repeat < repeats; repeat++) {
+                window.setTimeout(() => audioEngine.playSound(trackIdx, trackSounds[trackIdx], proStep.pitch, velocity), repeat * (baseDelay / repeats));
+              }
             }
           }
         });
@@ -134,7 +156,8 @@ export default function StepSequencer({
         // Actually, it's easier to just adjust the delay to the next step.
         // If current step is even, the delay to the next step (odd) is lengthened.
         // If current step is odd, the delay to the next step (even) is shortened.
-        const swingFactor = swing / 100; // 0 to 1
+        const averageTrackSwing = proSettings.trackSwing?.length ? proSettings.trackSwing.reduce((sum, value) => sum + value, 0) / proSettings.trackSwing.length : 0;
+        const swingFactor = Math.max(-0.4, Math.min(0.4, (swing + averageTrackSwing) / 100));
         const maxSwing = baseDelay * 0.6; // max delay added
         
         if (step % 2 === 1) { // next step is odd
@@ -157,7 +180,7 @@ export default function StepSequencer({
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [isPlaying, grid, bpm, swing, trackMutes, trackSolos]);
+  }, [isPlaying, grid, bpm, swing, trackMutes, trackSolos, trackSounds, proSettings]);
 
   const toggleCell = (trackIdx: number, stepIdx: number) => {
     audioEngine.init();
@@ -205,6 +228,17 @@ export default function StepSequencer({
                   const data = JSON.parse(e.dataTransfer.getData('application/json'));
                   if (data.type === 'chord' && data.notes) {
                     applyChord(trackIdx, data.notes);
+                  }
+                  if (data.type === 'piano-riff' && Array.isArray(data.notes)) {
+                    const times = data.notes.map((note: { time: number }) => note.time);
+                    const duration = Math.max(1, ...times);
+                    const nextGrid = grid.map(track => [...track]);
+                    nextGrid[trackIdx] = Array(16).fill(false);
+                    data.notes.forEach((note: { time: number }) => {
+                      const step = Math.min(15, Math.max(0, Math.round((note.time / duration) * 15)));
+                      nextGrid[trackIdx][step] = true;
+                    });
+                    onGridChange(nextGrid);
                   }
                 } catch (err) {}
               }}

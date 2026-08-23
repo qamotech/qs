@@ -7,6 +7,11 @@ import { SpectralAnalyzer, MasterLimiter, TapeSaturation, MultiBandCompressor, R
 
 import StepSequencer from './components/StepSequencer';
 import PerformancePads from './components/PerformancePads';
+import PianoRiffRecorder from './components/PianoRiffRecorder';
+import SequencerProTools from './components/SequencerProTools';
+import SoundDesignLab from './components/SoundDesignLab';
+import MixMasterConsole from './components/MixMasterConsole';
+import ProjectHub from './components/ProjectHub';
 import RiffGenerator from './components/RiffGenerator';
 import Oscilloscope from './components/Oscilloscope';
 import MasterEq from './components/MasterEq';
@@ -26,6 +31,7 @@ export default function App() {
     isPlaying,
     togglePlay,
     saveProject, 
+    loadProjectData,
     resetProject, 
     updateActivePack,
     updateBpm,
@@ -151,12 +157,14 @@ export default function App() {
               <button onClick={humanizeIslandBeat} className="hidden md:flex items-center gap-1.5 p-2 px-3 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 font-bold text-xs" title="Add subtle percussion and accent variation">
                 <Shuffle className="w-4 h-4" /> Humanize
               </button>
+              <ProjectHub project={project} onLoad={loadProjectData} />
               <button onClick={saveProject} className="p-1.5 md:p-2 md:px-4 bg-cyan-500 hover:bg-cyan-400 rounded-lg text-white font-bold"><Save className="w-4 h-4" /></button>
             </div>
           </header>
           <div className="flex-1 p-2 md:p-6 flex flex-col xl:grid xl:grid-cols-12 gap-6 overflow-y-auto relative z-10">
             <div className="xl:col-span-8 flex flex-col gap-6">
               <SamplePacks activePack={project.activePack} onChange={updateActivePack} />
+              <SequencerProTools grid={project.sequencerGrid} onGridChange={updateSequencerGrid} trackNames={project.trackNames} />
               <StepSequencer
                 grid={project.sequencerGrid}
                 onGridChange={updateSequencerGrid}
@@ -191,14 +199,17 @@ export default function App() {
               <ChordGenerator />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <PerformancePads />
+                <PianoRiffRecorder />
                 <RiffGenerator onGenerate={generateRandomPattern} />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <SynthTweaker params={project.synthParams} onChange={updateSynthParams} />
+                <SoundDesignLab />
               </div>
             </div>
             <div className="xl:col-span-4 flex flex-col gap-6 xl:border-l border-zinc-800/50 xl:pl-6">
               <MasterEq levels={project.eqLevels} onChange={updateEqLevels} />
+              <MixMasterConsole trackNames={project.trackNames} />
               <MultiBandCompressor />
               <TapeSaturation />
               <MasterEffects

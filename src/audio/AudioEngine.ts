@@ -158,9 +158,38 @@ export class AudioEngine {
   }
 
   private synthParams = { cutoff: 70, resonance: 30, envMod: 50, decay: 40 };
+  private soundDesign = { attack: 10, decay: 45, sustain: 65, release: 35, waveform: 'preset' as OscillatorType | 'preset', unison: 1, detune: 0, filterEnv: 35, glide: 0, drive: 0, modulation: 'none' as 'none' | 'chorus' | 'phaser' | 'flanger', modulationDepth: 0, width: 0, pump: 0 };
+  private importedSamples = new Map<string, AudioBuffer>();
+  private trackMix: { eq: [number, number, number]; pan: number; width: number; bus: string }[] = [];
+  private limiter = { ceiling: -0.1, release: 50 };
+  private masterPeak = 0;
 
   setSynthParams(params: { cutoff: number; resonance: number; envMod: number; decay: number }) {
     this.synthParams = params;
+  }
+
+  setSoundDesign(settings: Partial<typeof this.soundDesign>) {
+    this.soundDesign = { ...this.soundDesign, ...settings };
+  }
+
+  async importSample(name: string, file: File) {
+    this.init();
+    if (!this.ctx) throw new Error('Audio engine is unavailable');
+    const buffer = await file.arrayBuffer();
+    this.importedSamples.set(name, await this.ctx.decodeAudioData(buffer));
+  }
+
+  playImportedSample(name: string, velocity = 1) {
+    if (!this.ctx || !this.masterGain) return;
+    const buffer = this.importedSamples.get(name);
+    if (!buffer) return;
+    const source = this.ctx.createBufferSource();
+    const gain = this.ctx.createGain();
+    gain.gain.value = Math.max(0.05, Math.min(1, velocity));
+    source.buffer = buffer;
+    source.connect(gain);
+    gain.connect(this.masterGain);
+    source.start();
   }
 
   setVolume(vol: number) {
@@ -178,6 +207,27 @@ export class AudioEngine {
     this.trackVolumes = volumes;
   }
 
+  setTrackMix(mix: { eq: [number, number, number]; pan: number; width: number; bus: string }[]) {
+    this.trackMix = mix;
+  }
+
+  setLimiter(ceiling: number, release: number) {
+    this.limiter = { ceiling, release };
+    if (this.masterGain && this.ctx) {
+      const maxGain = Math.pow(10, ceiling / 20);
+      this.masterGain.gain.setTargetAtTime(Math.min(this.masterGain.gain.value, maxGain), this.ctx.currentTime, Math.max(0.01, release / 1000));
+    }
+  }
+
+  getMeter() {
+    if (!this.analyser) return { level: 0, peak: this.masterPeak, clipping: false };
+    const data = new Uint8Array(this.analyser.fftSize);
+    this.analyser.getByteTimeDomainData(data as Uint8Array<ArrayBuffer>);
+    const level = Math.max(...data.map(value => Math.abs(value - 128) / 128));
+    this.masterPeak = Math.max(level, this.masterPeak * 0.96);
+    return { level, peak: this.masterPeak, clipping: this.masterPeak > 0.98 };
+  }
+
   private applyPitch(freq: number) {
     return freq * Math.pow(2, this.masterPitch / 12);
   }
@@ -186,7 +236,7 @@ export class AudioEngine {
     // this.activePack = pack;
   }
 
-  playSound(trackIdx: number, soundId?: string) {
+  playSound(trackIdx: number, soundId?: string, semitoneOffset = 0, velocity = 1) {
     if (this.ctx?.state !== 'running' || !this.masterGain) return;
     
     // Fallback logic if no soundId provided (legacy support)
@@ -208,46 +258,105 @@ export class AudioEngine {
     const globalCutoff = 200 + (this.synthParams.cutoff / 100) * 15000;
     const globalQ = (this.synthParams.resonance / 100) * 20;
 
-    let decay = preset.decay * decayMod;
-    let baseFreq = this.applyPitch(preset.baseFreq * pitchMod);
-    const attack = preset.attack || 0.005;
+    let decay = preset.decay * decayMod * (0.4 + this.soundDesign.decay / 100);
+    let baseFreq = this.applyPitch(preset.baseFreq * pitchMod) * Math.pow(2, semitoneOffset / 12);
+    const attack = Math.max(0.002, (preset.attack || 0.005) + this.soundDesign.attack / 1000);
 
     const trackVol = this.trackVolumes[trackIdx] !== undefined ? this.trackVolumes[trackIdx] / 100 : 0.8;
-    const baseVol = 0.8 * trackVol;
+    const limiterGain = Math.pow(10, this.limiter.ceiling / 20);
+    const baseVol = Math.min(0.8 * trackVol * Math.max(0.05, Math.min(1, velocity)), limiterGain);
 
     const gain = this.ctx.createGain();
     const globalFilter = this.ctx.createBiquadFilter();
+    const mix = this.trackMix[trackIdx];
     
     globalFilter.type = 'lowpass';
     globalFilter.frequency.value = globalCutoff;
     globalFilter.Q.value = globalQ;
+    if (mix) {
+      globalFilter.frequency.value *= 0.6 + (mix.eq[0] + mix.eq[1] + mix.eq[2]) / 300;
+    }
     
     gain.connect(globalFilter);
-    globalFilter.connect(this.masterGain);
+    let output: AudioNode = globalFilter;
+    if (this.soundDesign.drive > 0) {
+      const shaper = this.ctx.createWaveShaper();
+      const amount = this.soundDesign.drive * 8;
+      const curve = new Float32Array(256);
+      for (let i = 0; i < curve.length; i++) {
+        const x = (i * 2) / (curve.length - 1) - 1;
+        curve[i] = Math.tanh(x * (1 + amount));
+      }
+      shaper.curve = curve;
+      globalFilter.connect(shaper);
+      output = shaper;
+    }
+    if (this.soundDesign.modulation !== 'none' && this.soundDesign.modulationDepth > 0) {
+      const delay = this.ctx.createDelay(0.05);
+      const lfo = this.ctx.createOscillator();
+      const lfoGain = this.ctx.createGain();
+      delay.delayTime.value = this.soundDesign.modulation === 'flanger' ? 0.003 : 0.012;
+      lfo.frequency.value = this.soundDesign.modulation === 'phaser' ? 0.35 : 1.2;
+      lfoGain.gain.value = this.soundDesign.modulationDepth / 4000;
+      lfo.connect(lfoGain);
+      lfoGain.connect(delay.delayTime);
+      output.connect(delay);
+      output = delay;
+      lfo.start();
+      lfo.stop(this.ctx.currentTime + attack + decay + this.soundDesign.release / 100 + 0.1);
+    }
+    if (this.ctx.createStereoPanner && this.soundDesign.width > 0) {
+      const stereo = this.ctx.createStereoPanner();
+      stereo.pan.value = Math.min(1, this.soundDesign.width / 100) * (trackIdx % 2 ? 1 : -1);
+      output.connect(stereo);
+      output = stereo;
+    }
+    if (this.ctx.createStereoPanner && mix) {
+      const trackPan = this.ctx.createStereoPanner();
+      trackPan.pan.value = Math.max(-1, Math.min(1, mix.pan / 100));
+      output.connect(trackPan);
+      output = trackPan;
+    }
+    if (this.soundDesign.pump > 0) {
+      const pumpGain = this.ctx.createGain();
+      const depth = this.soundDesign.pump / 100;
+      pumpGain.gain.setValueAtTime(Math.max(0.08, 1 - depth), this.ctx.currentTime);
+      pumpGain.gain.exponentialRampToValueAtTime(1, this.ctx.currentTime + 0.12);
+      output.connect(pumpGain);
+      output = pumpGain;
+    }
+    output.connect(this.masterGain);
 
     if (preset.type === 'osc') {
-      const osc = this.ctx.createOscillator();
-      osc.type = preset.oscType || 'sine';
+      const voiceCount = Math.max(1, Math.min(4, this.soundDesign.unison));
+      const oscillators: OscillatorNode[] = [];
       
       const filter = this.ctx.createBiquadFilter();
       filter.type = preset.filterType || 'lowpass';
       filter.frequency.value = preset.filterFreq || 20000;
       filter.Q.value = preset.filterQ || 1;
       
-      osc.connect(filter);
-      filter.connect(gain);
-      
-      osc.frequency.setValueAtTime(baseFreq, this.ctx.currentTime);
-      if (preset.sweep && preset.sweep !== 1) {
-        osc.frequency.exponentialRampToValueAtTime(Math.max(10, baseFreq * preset.sweep), this.ctx.currentTime + decay);
+      for (let voice = 0; voice < voiceCount; voice++) {
+        const osc = this.ctx.createOscillator();
+        osc.type = this.soundDesign.waveform === 'preset' ? (preset.oscType || 'sine') : this.soundDesign.waveform;
+        osc.detune.value = (voice - (voiceCount - 1) / 2) * this.soundDesign.detune;
+        osc.connect(filter);
+        const frequency = baseFreq;
+        osc.frequency.setValueAtTime(this.soundDesign.glide ? Math.max(10, frequency * 0.7) : frequency, this.ctx.currentTime);
+        if (this.soundDesign.glide) osc.frequency.exponentialRampToValueAtTime(frequency, this.ctx.currentTime + this.soundDesign.glide / 100);
+        if (preset.sweep && preset.sweep !== 1) osc.frequency.exponentialRampToValueAtTime(Math.max(10, frequency * preset.sweep), this.ctx.currentTime + decay);
+        oscillators.push(osc);
       }
+      filter.connect(gain);
+      filter.frequency.setValueAtTime(Math.max(80, filter.frequency.value * (0.2 + this.soundDesign.filterEnv / 100)), this.ctx.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(Math.max(80, preset.filterFreq || 20000), this.ctx.currentTime + attack + decay * 0.5);
       
       gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(baseVol, this.ctx.currentTime + attack);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + attack + decay);
-      
-      osc.start(this.ctx.currentTime);
-      osc.stop(this.ctx.currentTime + attack + decay);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.001, baseVol * (this.soundDesign.sustain / 100)), this.ctx.currentTime + attack + decay * 0.45);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + attack + decay + this.soundDesign.release / 100);
+      const stopTime = this.ctx.currentTime + attack + decay + this.soundDesign.release / 100;
+      oscillators.forEach(osc => { osc.start(this.ctx!.currentTime); osc.stop(stopTime); });
       
     } else if (preset.type === 'noise') {
       const bufferSize = this.ctx.sampleRate * Math.max(decay + attack, 0.5);
@@ -275,7 +384,7 @@ export class AudioEngine {
       
       const filter = this.ctx.createBiquadFilter();
       filter.type = preset.filterType || 'highpass';
-      filter.frequency.value = this.applyPitch((preset.filterFreq || 1000) * pitchMod);
+        filter.frequency.value = this.applyPitch((preset.filterFreq || 1000) * pitchMod) * Math.pow(2, semitoneOffset / 12);
       filter.Q.value = preset.filterQ || 1;
       
       noise.connect(filter);
