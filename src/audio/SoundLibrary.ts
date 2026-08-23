@@ -36,8 +36,7 @@ const addPerc = (name: string, freq: number, decay: number, osc: OscillatorType 
 const addSynth = (name: string, freq: number, decay: number, osc: OscillatorType = 'sawtooth', filterFreq: number = 2000) => {
   SOUND_LIBRARY.push({ id: name.toLowerCase().replace(/\s/g, '-'), name, category: 'Synth', type: 'osc', oscType: osc, baseFreq: freq, decay, sweep: 1, filterType: 'lowpass', filterFreq, filterQ: 5, attack: 0.05 });
 };
-
-// Kicks (16)
+// Kicks (80)
 addKick('Classic Kick', 150, 0.5, 0.01);
 addKick('Deep Kick', 100, 0.8, 0.01);
 addKick('Punchy Kick', 200, 0.4, 0.05);
