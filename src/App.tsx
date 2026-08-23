@@ -1,17 +1,28 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, AudioWaveform, Save, RotateCcw, Undo2, Redo2, Volume2, Loader2, Sparkles, Wand2, Play, Square, Trash2, Mic } from 'lucide-react';
+import { Settings, AudioWaveform, Save, RotateCcw, Undo2, Redo2, Volume2, Loader2, Sparkles, Sword, Play, Square, Trash2, Mic, Shield, Maximize2, HelpCircle } from 'lucide-react';
+import { useAudioIntensity } from './hooks/useAudioIntensity';
 
+import Stars from './components/Stars';
+import StartScreen from './components/StartScreen';
+import StatusBar from './components/StatusBar';
+import Tooltip from './components/Tooltip';
+import HistoryModal from './components/HistoryModal';
+import HelpModal from './components/HelpModal';
+import Modal from './components/Modal';
+import ThemeSwitcher from './components/ThemeSwitcher';
 import { useProject } from './hooks/useProject';
+import { MidiProvider } from './hooks/useMidi';
 import { audioEngine } from './audio/AudioEngine';
 import { SpectralAnalyzer, MasterLimiter, TapeSaturation, MultiBandCompressor, LfoModulator, ReverbChamber, ChordGenerator, Arpeggiator, EnhancementsRack } from './components/NewFeatures';
+import PerformancePadsSettings from './components/PerformancePadsSettings';
+import StepSequencerSettings from './components/StepSequencerSettings';
 
 const StepSequencer = lazy(() => import('./components/StepSequencer'));
 const PerformancePads = lazy(() => import('./components/PerformancePads'));
-const DjScratch = lazy(() => import('./components/DjScratch'));
 const Oscilloscope = lazy(() => import('./components/Oscilloscope'));
 const MasterEq = lazy(() => import('./components/MasterEq'));
-const AiBeatbox = lazy(() => import('./components/AiBeatbox'));
+import AiBeatbox from './components/AiBeatbox';
 const SpatialPanner = lazy(() => import('./components/SpatialPanner'));
 const SynthTweaker = lazy(() => import('./components/SynthTweaker'));
 const MasterPitchWheel = lazy(() => import('./components/MasterPitchWheel'));
@@ -27,7 +38,14 @@ function Loader() {
 }
 
 export default function App() {
+  const intensity = useAudioIntensity();
   const [started, setStarted] = useState(false);
+  const [isPadsModalOpen, setPadsModalOpen] = useState(false);
+  const [isSequencerModalOpen, setSequencerModalOpen] = useState(false);
+  const [isHistoryModalOpen, setHistoryModalOpen] = useState(false);
+  const [isHelpModalOpen, setHelpModalOpen] = useState(false);
+  const [theme, setTheme] = useState<'midnight' | 'qamelot'>('midnight');
+  const [status, setStatus] = useState('');
   const { 
     project, 
     isPlaying,
@@ -43,7 +61,10 @@ export default function App() {
     updatePannerPosition,
     updateSwing,
     updateReverb,
+    updateReverbAutomation,
     updateDelay,
+    updateDelayAutomation,
+    updateMasterAutomation,
     toggleTrackMute,
     toggleTrackSolo,
     updateTrackSound,
@@ -53,13 +74,28 @@ export default function App() {
     redo,
     canUndo,
     canRedo,
+    history,
+    currentIndex,
+    jumpTo,
     addTrack,
     removeTrack,
     copyTrack,
     pasteTrack,
     clearTrack,
     randomizeTrack,
-    applyChord
+    reverseTrack,
+    invertTrack,
+    shiftTrackLeft,
+    shiftTrackRight,
+    generateRiff,
+    applyChord,
+    duplicateTrack,
+    randomizeVelocities,
+    humanizeTiming,
+    deleteAllNotes,
+    updateSnapToGrid,
+    toggleTrackCutSelf,
+    toggleTrackSustain
   } = useProject();
 
   useEffect(() => {
@@ -92,6 +128,11 @@ export default function App() {
         togglePlay();
       }
 
+      if (e.key === '?') {
+        e.preventDefault();
+        setHelpModalOpen(prev => !prev);
+      }
+
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         saveProject();
@@ -117,11 +158,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [started, togglePlay, saveProject, resetProject, undo, redo]);
 
+  const handleGenerateSkeleton = (skeleton: { grid: boolean[][], sounds: string[] }) => {
+    updateSequencerGrid(skeleton.grid);
+    skeleton.sounds.forEach((sound, i) => {
+      updateTrackSound(i, sound);
+    });
+    setStatus('AI Song Skeleton generated successfully!');
+  };
+
   return (
-    <div className="h-screen w-screen bg-black text-zinc-300 font-mono flex flex-col items-center justify-center relative overflow-hidden">
-      
-      <AnimatePresence mode="wait">
-        {!started ? (
+    <MidiProvider>
+      <AnimatePresence>
+        {!started && <StartScreen onStart={() => setStarted(true)} />}
+      </AnimatePresence>
+      <div className={`h-screen w-screen font-mono flex flex-col items-center justify-center relative overflow-hidden film-grain ${theme === 'qamelot' ? 'theme-qamelot' : 'theme-midnight'} bg-app text-app`}>
+        
+        <AnimatePresence mode="wait">
+          {!started ? (
           <motion.div
             key="start-screen"
             initial={{ opacity: 0 }}
@@ -131,6 +184,7 @@ export default function App() {
             className="absolute inset-0 flex flex-col items-center justify-center z-50 bg-black"
           >
             {/* Immersive background effects */}
+            <Stars />
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
               <div className="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] bg-[radial-gradient(ellipse_at_center,rgba(79,70,229,0.15)_0%,rgba(0,0,0,1)_50%)] animate-[spin_60s_linear_infinite]" />
               <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_80%)]" />
@@ -140,65 +194,79 @@ export default function App() {
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2, duration: 0.8 }}
-              className="flex flex-col items-center justify-center max-w-lg w-full border border-zinc-800/50 bg-zinc-900/40 p-12 rounded-3xl shadow-2xl backdrop-blur-xl relative z-10"
+              className="flex flex-col items-center justify-center max-w-lg w-full bg-zinc-950/80 backdrop-blur-3xl border border-zinc-800 p-16 rounded-[2rem] shadow-[0_0_50px_rgba(0,0,0,0.8)] relative z-10"
             >
-              <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-cyan-500 rounded-3xl blur opacity-20 animate-pulse" />
-              <div className="w-32 h-32 mb-8 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-[0_0_40px_rgba(99,102,241,0.4)] relative">
-                <div className="absolute inset-0 bg-white/20 rounded-2xl animate-ping" style={{ animationDuration: '3s' }} />
-                <AudioWaveform className="w-16 h-16 text-white relative z-10 drop-shadow-lg" />
+              {/* Logo Area */}
+              <div className="mb-10 relative">
+                <div className="absolute inset-0 bg-cyan-500/10 rounded-full blur-3xl animate-pulse" />
+                <div className="relative p-6 bg-zinc-900 border border-zinc-700 rounded-3xl shadow-[inset_0_1px_1px_rgba(255,255,255,0.1),0_0_20px_rgba(0,0,0,0.5)]">
+                  <Shield className="w-24 h-24 text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
+                </div>
               </div>
-              <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-zinc-400 mb-4 text-center tracking-tighter">Qamelot Studio</h1>
-              <p className="text-zinc-400 text-center mb-12 text-lg font-light tracking-wide max-w-sm">
-                Premastered HipHop, Pop & RnB Audio Production Workstation
+              
+              {/* Branding */}
+              <h1 className="text-6xl font-serif text-transparent bg-clip-text bg-gradient-to-b from-white via-zinc-200 to-zinc-500 mb-4 text-center tracking-tight [text-shadow:2px_2px_0px_rgba(0,0,0,0.5)]">Qamelot Studio</h1>
+              <p className="text-zinc-400 text-center mb-12 text-sm font-light tracking-[0.2em] uppercase max-w-sm">
+                Premastered Audio Production Workstation
               </p>
-              <button
+
+              {/* Start Button */}
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={() => setStarted(true)}
-                className="group relative w-full py-5 bg-zinc-100 hover:bg-white text-black rounded-2xl font-bold text-lg transition-all duration-300 shadow-[0_0_30px_rgba(255,255,255,0.1)] hover:shadow-[0_0_50px_rgba(255,255,255,0.2)] hover:scale-[1.02]"
+                className="group relative w-full max-w-xs py-5 bg-gradient-to-b from-zinc-800 to-zinc-950 border border-zinc-600 hover:border-cyan-500 text-zinc-100 rounded-2xl font-bold text-lg uppercase tracking-[0.2em] transition-all duration-300 shadow-[0_4px_6px_rgba(0,0,0,0.3),inset_0_1px_1px_rgba(255,255,255,0.1)] hover:shadow-[0_0_20px_rgba(6,182,212,0.3)]"
               >
+                <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-cyan-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 <span className="relative z-10 flex items-center justify-center gap-3">
-                  <Wand2 className="w-5 h-5 group-hover:rotate-12 transition-transform" />
+                  <Sword className="w-5 h-5 text-cyan-400 group-hover:rotate-12 transition-transform duration-300" />
                   Initialize Engine
                 </span>
-              </button>
+              </motion.button>
             </motion.div>
           </motion.div>
         ) : (
-          <motion.div
-            key="main-studio"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.5 }}
-            className="w-full h-full flex flex-col bg-[#0a0a0c] overflow-hidden relative electricity-border"
-          >
-            {/* Header / Top Bar */}
-            <header className="h-16 shrink-0 border-b border-zinc-800/80 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur z-20 relative shadow-md">
+          <>
+            <motion.div
+              key="main-studio"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ 
+                opacity: 1, 
+                scale: 1,
+                boxShadow: `0 0 ${intensity * 40}px rgba(6, 182, 212, ${intensity * 0.2})` 
+              }}
+              transition={{ duration: 0.5 }}
+              className="w-full h-full flex flex-col bg-app-gradient overflow-hidden relative electricity-border"
+            >
+              {/* Header / Top Bar */}
+              <header className="h-16 shrink-0 border-b border-white/5 flex items-center justify-between px-6 bg-zinc-950/80 backdrop-blur-md z-20 relative shadow-md">
               <div className="flex items-center gap-4">
                   <div className="p-2 bg-cyan-500/10 rounded-lg">
                     <AudioWaveform className="text-cyan-400 w-6 h-6 animate-pulse" />
                   </div>
-                  <h2 className="text-xl font-black text-zinc-100 tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-white to-zinc-400 hidden lg:block">Qamelot</h2>
+                  <h2 className="text-xl font-black text-transparent bg-gradient-to-r from-zinc-200 to-zinc-500 bg-clip-text hidden lg:block tracking-widest">Qamelot</h2>
                 </div>
                 
                 {/* Transport Controls (Always Visible) */}
                 <div className="flex items-center justify-center gap-2 md:gap-4 flex-1 px-4">
-                  <div className="flex items-center gap-1 bg-zinc-900 px-2 md:px-3 py-1.5 rounded-lg border border-zinc-800">
+                  <div className="flex items-center gap-1 bg-zinc-950 px-3 py-1.5 rounded-full border border-zinc-800 shadow-inner focus-within:ring-1 focus-within:ring-emerald-500/50">
                     <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest hidden md:inline">Swing</span>
                     <input 
                       type="number" 
                       value={project.swing}
                       onChange={(e) => updateSwing(Number(e.target.value))}
-                      className="w-10 bg-transparent text-xs md:text-sm text-cyan-400 font-bold text-center outline-none"
+                      className="w-10 bg-transparent text-xs md:text-sm text-zinc-300 font-bold text-center outline-none"
                       min="0"
                       max="100"
                     />
                   </div>
-                  <div className="flex items-center gap-1 bg-zinc-900 px-2 md:px-3 py-1.5 rounded-lg border border-zinc-800">
+                  <div className="flex items-center gap-1 bg-zinc-950 px-3 py-1.5 rounded-full border border-zinc-800 shadow-inner focus-within:ring-1 focus-within:ring-emerald-500/50">
                     <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest hidden md:inline">BPM</span>
                     <input 
                       type="number" 
                       value={project.bpm}
                       onChange={(e) => updateBpm(Number(e.target.value))}
-                      className="w-10 md:w-12 bg-transparent text-xs md:text-sm text-cyan-400 font-bold text-center outline-none"
+                      className="w-10 md:w-12 bg-transparent text-xs md:text-sm text-zinc-300 font-bold text-center outline-none"
                       min="40"
                       max="300"
                     />
@@ -206,13 +274,29 @@ export default function App() {
                   
                   <div className="w-px h-6 bg-zinc-800 mx-1 md:mx-2" />
                   
+                  <Tooltip text={isPlaying ? 'Stop Playback' : 'Start Playback'} shortcut="Space">
                   <button 
                     onClick={togglePlay}
-                    className={`p-2 px-3 md:px-6 rounded-lg flex items-center justify-center transition-all duration-300 gap-2 font-bold ${isPlaying ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.6)] animate-pulse' : 'bg-cyan-500/20 text-cyan-500 border border-cyan-500/50 hover:bg-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.2)]'}`}
+                    className={`p-2 px-3 md:px-6 rounded-full flex items-center justify-center transition-all duration-300 gap-2 font-bold text-xs uppercase tracking-widest ${isPlaying ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)] border border-emerald-400' : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-white hover:border-zinc-700 shadow-sm'}`}
                   >
                     {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
                     <span className="hidden md:inline">{isPlaying ? 'STOP' : 'PLAY'}</span>
                   </button>
+                </Tooltip>
+
+                  {isPlaying && (
+                    <button 
+                      onClick={() => {
+                        // Reset logic: Stop playback and reset step
+                        togglePlay(); // This will stop playback if already playing
+                        // Note: StepSequencer component manages currentStep, so triggering reset from here requires a ref or context update.
+                        // For now, let's just trigger stop and hope the UI updates.
+                      }}
+                      className="p-2 px-3 rounded-lg flex items-center justify-center transition-all duration-300 bg-zinc-900 border border-zinc-700 text-zinc-400 hover:text-white"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                    </button>
+                  )}
 
                   <button className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors electric-record" title="Record">
                     <div className="w-3 h-3 rounded-full bg-red-500" />
@@ -220,6 +304,12 @@ export default function App() {
                   <button className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-cyan-400 hover:bg-zinc-800 transition-colors" title="Metronome">
                     <span className="text-[10px] font-bold">METRO</span>
                   </button>
+                  <Tooltip text="Keyboard Shortcuts" shortcut="?">
+                    <button onClick={() => setHelpModalOpen(true)} className="p-2 text-zinc-400 hover:text-cyan-400 transition-colors">
+                      <HelpCircle className="w-5 h-5" />
+                    </button>
+                  </Tooltip>
+                  <ThemeSwitcher theme={theme} onChange={setTheme} />
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -255,7 +345,10 @@ export default function App() {
                   
                   <div className="hidden md:flex items-center gap-2 px-2 bg-zinc-900/50 rounded-lg py-1.5 border border-zinc-800 ml-2" title="Master Volume">
                     <Volume2 className="w-4 h-4 text-cyan-400" />
-                    <input
+                    <motion.input
+                      animate={{
+                        boxShadow: `0 0 ${intensity * 10}px rgba(6, 182, 212, ${intensity * 0.5})`
+                      }}
                       type="range"
                       min="0"
                       max="100"
@@ -283,10 +376,21 @@ export default function App() {
                       onBpmChange={updateBpm}
                       swing={project.swing}
                       onSwingChange={updateSwing}
+                      reverbAutomation={project.reverbAutomation}
+                      onReverbAutomationChange={updateReverbAutomation}
+                      delayAutomation={project.delayAutomation}
+                      onDelayAutomationChange={updateDelayAutomation}
+                      snapToGrid={project.snapToGrid}
+                      onSnapToGridChange={updateSnapToGrid}
+                      filterType={project.filterType}
                       trackMutes={project.trackMutes}
                       onToggleMute={toggleTrackMute}
                       trackSolos={project.trackSolos}
                       onToggleSolo={toggleTrackSolo}
+                      trackCutSelf={project.trackCutSelf}
+                      onToggleCutSelf={toggleTrackCutSelf}
+                      trackSustain={project.trackSustain}
+                      onToggleSustain={toggleTrackSustain}
                       trackSounds={project.trackSounds}
                       onTrackSoundChange={updateTrackSound}
                       onClearGrid={() => updateSequencerGrid(project.sequencerGrid.map(row => row.map(() => false)))}
@@ -296,13 +400,24 @@ export default function App() {
                       pasteTrack={pasteTrack}
                       clearTrack={clearTrack}
                       randomizeTrack={randomizeTrack}
+                      reverseTrack={reverseTrack}
+                      invertTrack={invertTrack}
+                      shiftTrackLeft={shiftTrackLeft}
+                      shiftTrackRight={shiftTrackRight}
+                      generateRiff={generateRiff}
                       applyChord={applyChord}
+                      duplicateTrack={duplicateTrack}
+                      randomizeVelocities={randomizeVelocities}
+                      humanizeTiming={humanizeTiming}
+                      deleteAllNotes={deleteAllNotes}
+                      setStatus={setStatus}
+                      onMaximize={() => setSequencerModalOpen(true)}
                     />
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <PerformancePads />
-                      <DjScratch />
-                    </div>
+                    {/* PerformancePads expanded */}
+                    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                      <PerformancePads onMaximize={() => setPadsModalOpen(true)} />
+                    </motion.div>
   
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <SynthTweaker params={project.synthParams} onChange={updateSynthParams} />
@@ -323,7 +438,7 @@ export default function App() {
                       <h3 className="text-zinc-400 font-bold tracking-widest text-xs uppercase">Processing</h3>
                       <div className="h-px bg-zinc-800 flex-1 ml-4" />
                     </div>
-                    <EnhancementsRack />
+                    <EnhancementsRack setStatus={setStatus} />
                     <MasterEq levels={project.eqLevels} onChange={updateEqLevels} />
                     <MultiBandCompressor />
                     <TapeSaturation />
@@ -351,7 +466,7 @@ export default function App() {
                       <div className="h-px bg-zinc-800 flex-1 ml-4" />
                     </div>
                     <MasterLimiter />
-                    <AiBeatbox onGenerate={generateRandomPattern} />
+                    <AiBeatbox onGenerate={generateRandomPattern} onGenerateSkeleton={handleGenerateSkeleton} />
 
                     <div className="flex items-center justify-between mt-4">
                       <h3 className="text-zinc-400 font-bold tracking-widest text-xs uppercase">Analysis</h3>
@@ -363,8 +478,94 @@ export default function App() {
                 </div>
               </div>
             </motion.div>
+            <StatusBar 
+              status={status} 
+              undo={undo} 
+              redo={redo} 
+              canUndo={canUndo} 
+              canRedo={canRedo} 
+              onOpenHistory={() => setHistoryModalOpen(true)}
+            />
+          </>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {isHistoryModalOpen && (
+          <HistoryModal 
+            onClose={() => setHistoryModalOpen(false)} 
+            history={history} 
+            currentIndex={currentIndex}
+            onJumpTo={(index) => {
+              jumpTo(index);
+              setHistoryModalOpen(false);
+            }}
+          />
+        )}
+        {isHelpModalOpen && (
+          <HelpModal onClose={() => setHelpModalOpen(false)} />
+        )}
+        {isPadsModalOpen && (
+          <Modal onClose={() => setPadsModalOpen(false)} title="Performance Pads" fullscreen>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <PerformancePads />
+              <EnhancementsRack />
+            </div>
+          </Modal>
+        )}
+        {isSequencerModalOpen && (
+          <Modal onClose={() => setSequencerModalOpen(false)} title="Step Sequencer" fullscreen>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <StepSequencer 
+                grid={project.sequencerGrid} 
+                onGridChange={updateSequencerGrid} 
+                isPlaying={isPlaying}
+                onTogglePlay={togglePlay}
+                bpm={project.bpm}
+                onBpmChange={updateBpm}
+                swing={project.swing}
+                onSwingChange={updateSwing}
+                reverbAutomation={project.reverbAutomation}
+                onReverbAutomationChange={updateReverbAutomation}
+                delayAutomation={project.delayAutomation}
+                onDelayAutomationChange={updateDelayAutomation}
+                snapToGrid={project.snapToGrid}
+                onSnapToGridChange={updateSnapToGrid}
+                filterType={project.filterType}
+                trackMutes={project.trackMutes}
+                onToggleMute={toggleTrackMute}
+                trackSolos={project.trackSolos}
+                onToggleSolo={toggleTrackSolo}
+                trackCutSelf={project.trackCutSelf}
+                onToggleCutSelf={toggleTrackCutSelf}
+                trackSustain={project.trackSustain}
+                onToggleSustain={toggleTrackSustain}
+                trackSounds={project.trackSounds}
+                onTrackSoundChange={updateTrackSound}
+                onClearGrid={() => updateSequencerGrid(project.sequencerGrid.map(row => row.map(() => false)))}
+                addTrack={addTrack}
+                removeTrack={removeTrack}
+                copyTrack={copyTrack}
+                pasteTrack={pasteTrack}
+                clearTrack={clearTrack}
+                randomizeTrack={randomizeTrack}
+                reverseTrack={reverseTrack}
+                invertTrack={invertTrack}
+                shiftTrackLeft={shiftTrackLeft}
+                shiftTrackRight={shiftTrackRight}
+                generateRiff={generateRiff}
+                applyChord={applyChord}
+                duplicateTrack={duplicateTrack}
+                randomizeVelocities={randomizeVelocities}
+                humanizeTiming={humanizeTiming}
+                deleteAllNotes={deleteAllNotes}
+                setStatus={setStatus}
+              />
+              <EnhancementsRack setStatus={setStatus} />
+            </div>
+          </Modal>
         )}
       </AnimatePresence>
     </div>
+  </MidiProvider>
   );
 }

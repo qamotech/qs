@@ -3,12 +3,22 @@ import { audioEngine } from '../audio/AudioEngine';
 
 export default function Oscilloscope() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const resizeObserver = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        canvas.width = entry.contentRect.width;
+        canvas.height = entry.contentRect.height;
+      }
+    });
+    resizeObserver.observe(container);
 
     let animationId: number;
     const dataArray = new Uint8Array(1024);
@@ -50,7 +60,10 @@ export default function Oscilloscope() {
 
     draw();
 
-    return () => cancelAnimationFrame(animationId);
+    return () => {
+      cancelAnimationFrame(animationId);
+      resizeObserver.disconnect();
+    };
   }, []);
 
   return (
@@ -59,11 +72,9 @@ export default function Oscilloscope() {
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.6)]"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
         <h3 className="font-semibold text-zinc-200 leading-none">OLED Oscilloscope</h3>
       </div>
-      <div className="flex-1 w-full relative rounded-lg overflow-hidden border border-zinc-700/50 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
+      <div ref={containerRef} className="flex-1 w-full relative rounded-lg overflow-hidden border border-zinc-700/50 shadow-[inset_0_0_20px_rgba(0,0,0,0.8)]">
         <canvas 
           ref={canvasRef}
-          width={300}
-          height={120}
           className="w-full h-full object-cover bg-zinc-950"
         />
         {/* Grid overlay */}

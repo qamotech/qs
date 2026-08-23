@@ -1,11 +1,53 @@
 @import "tailwindcss";
 
+:root {
+  --color-app-bg: #09090b;
+  --color-app-text: #f4f4f5;
+  --color-accent: #06b6d4;
+  --color-card-bg: #18181b;
+  --color-border: #27272a;
+  --bg-gradient: radial-gradient(circle at 15% 50%, rgba(24, 24, 27, 0.4) 0%, transparent 50%),
+                 radial-gradient(circle at 85% 30%, rgba(39, 39, 42, 0.3) 0%, transparent 50%),
+                 radial-gradient(circle at 50% 100%, rgba(9, 9, 11, 1) 0%, transparent 50%);
+}
+
+.theme-qamelot {
+  --color-app-bg: #1e1b4b;
+  --color-app-text: #fef3c7;
+  --color-accent: #fbbf24;
+  --color-card-bg: #4c1d95;
+  --color-border: #78350f;
+  --bg-gradient: radial-gradient(at 0% 0%, rgba(120, 53, 15, 0.4) 0px, transparent 50%),
+                 radial-gradient(at 100% 0%, rgba(180, 83, 9, 0.3) 0px, transparent 50%),
+                 radial-gradient(at 100% 100%, rgba(76, 29, 149, 0.3) 0px, transparent 50%),
+                 radial-gradient(at 0% 100%, rgba(20, 8, 15, 1) 0px, transparent 50%);
+}
+
 @layer base {
   body {
-    background-color: var(--color-zinc-950);
-    color: var(--color-zinc-100);
+    background-color: var(--color-app-bg);
+    color: var(--color-app-text);
     overflow-x: hidden;
   }
+}
+
+@layer utilities {
+  .bg-app { background-color: var(--color-app-bg); }
+  .text-app { color: var(--color-app-text); }
+  .bg-card { background-color: var(--color-card-bg); }
+  .border-app { border-color: var(--color-border); }
+  .text-accent { color: var(--color-accent); }
+  .bg-accent { background-color: var(--color-accent); }
+  .bg-app-gradient { background: var(--bg-gradient); }
+}
+
+.film-grain::after {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
 }
 
 /* 1. Custom Scrollbars */
@@ -57,12 +99,12 @@ input[type="range"]::-webkit-slider-runnable-track {
   box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
 }
 input[type="range"]::-webkit-slider-thumb {
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5), inset 0 2px 4px rgba(255,255,255,0.2);
-  border: 1px solid rgba(99, 102, 241, 0.8);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5), inset 0 2px 4px rgba(255,255,255,0.2);
+  border: 1px solid rgba(16, 185, 129, 0.8);
   height: 16px;
   width: 16px;
   border-radius: 50%;
-  background: #4f46e5;
+  background: #10b981;
   cursor: pointer;
   -webkit-appearance: none;
   margin-top: -6px;
@@ -70,7 +112,7 @@ input[type="range"]::-webkit-slider-thumb {
 }
 input[type="range"]::-webkit-slider-thumb:hover {
   transform: scale(1.2);
-  background: #6366f1;
+  background: #059669;
 }
 
 /* 3. Animated Background */

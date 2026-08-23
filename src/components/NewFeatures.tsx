@@ -146,26 +146,23 @@ export function ChordGenerator() {
   };
 
   return (
-    <div className="bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/50 rounded-2xl p-5 shadow-2xl relative overflow-hidden group shrink-0">
-      <div className="flex items-center gap-2 mb-4">
-        <HardDrive className="w-5 h-5 text-purple-400" />
-        <h3 className="font-semibold text-zinc-200 leading-none">Chord Gen</h3>
+    <div className="bg-zinc-950/80 backdrop-blur-3xl border border-zinc-700 rounded-2xl p-6 shadow-[0_0_20px_rgba(0,0,0,0.5)] h-64 flex flex-col">
+      <div className="flex items-center gap-3 mb-6">
+        <HardDrive className="w-6 h-6 text-purple-400" />
+        <h3 className="font-bold text-zinc-100 uppercase tracking-widest text-lg">Chord Gen</h3>
       </div>
-      <div className="flex flex-col gap-2">
-        <span className="text-[10px] text-zinc-500 uppercase tracking-widest text-center">Drag to Sequencer</span>
-        <div className="grid grid-cols-2 gap-2">
-          {chords.map(chord => (
-            <div 
-              key={chord.name}
-              draggable
-              onDragStart={(e) => handleDragStart(e, chord)}
-              className="bg-purple-500/10 border border-purple-500/30 rounded p-2 text-center cursor-grab active:cursor-grabbing hover:bg-purple-500/20 transition-colors"
-            >
-              <div className="text-purple-200 font-bold text-xs">{chord.name}</div>
-              <div className="text-[10px] text-purple-400 mt-1">{chord.notes.join(' - ')}</div>
-            </div>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 gap-3 flex-grow">
+        {chords.map(chord => (
+          <div 
+            key={chord.name}
+            draggable
+            onDragStart={(e) => handleDragStart(e, chord)}
+            className="bg-zinc-900 border border-zinc-700 hover:border-purple-500 rounded-xl p-3 text-center cursor-grab active:cursor-grabbing transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.2)] flex flex-col justify-center"
+          >
+            <div className="text-zinc-100 font-bold text-sm tracking-wide">{chord.name}</div>
+            <div className="text-[11px] text-purple-400 mt-1 font-mono">{chord.notes.join(' - ')}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -187,22 +184,36 @@ export function Arpeggiator() {
   );
 }
 
-export function EnhancementsRack() {
+export function EnhancementsRack({ setStatus }: { setStatus: (status: string) => void }) {
+  const [activeEnhancements, setActiveEnhancements] = useState<Record<string, boolean>>({});
   const enhancements = [
     'Tube', 'Crunch', 'Warmth', 'Excite', 'Air', 'Sub', 'Punch', 'Snap', 
     'Grit', 'Fuzz', 'LoFi', 'Tape', 'Vinyl', 'Bitcrush', 'Chorus', 'Flange', 
     'Phase', 'Widener', 'Stereo', 'Mono', 'Gate', 'De-Ess', 'Transient', 'Limit'
   ];
+
+  const toggleEnhancement = (name: string) => {
+    const newState = !activeEnhancements[name];
+    setActiveEnhancements(prev => ({ ...prev, [name]: newState }));
+    setStatus(`${name} ${newState ? 'Enabled' : 'Disabled'}`);
+  };
+
   return (
     <div className="bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/50 rounded-2xl p-5 shadow-2xl relative overflow-hidden shrink-0">
       <div className="flex items-center gap-2 mb-4">
         <Settings2 className="w-5 h-5 text-cyan-400" />
-        <h3 className="font-semibold text-zinc-200 leading-none">24 Enhancements Rack</h3>
+        <h3 className="font-semibold text-zinc-200 leading-none">Enhancements Rack</h3>
       </div>
       <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
         {enhancements.map((name, i) => (
-          <div key={i} className="flex flex-col items-center gap-1 group cursor-pointer">
-            <div className={`w-3 h-3 rounded-full border transition-all ${i % 3 === 0 ? 'bg-cyan-500 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]' : 'bg-zinc-900 border-zinc-700 group-hover:border-zinc-500'}`} />
+          <div 
+            key={i} 
+            className="flex flex-col items-center gap-1 group cursor-pointer"
+            onClick={() => toggleEnhancement(name)}
+            onMouseEnter={() => setStatus(`Toggle: ${name}`)}
+            onMouseLeave={() => setStatus('')}
+          >
+            <div className={`w-3 h-3 rounded-full border transition-all ${activeEnhancements[name] ? 'bg-cyan-500 border-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]' : 'bg-zinc-900 border-zinc-700 group-hover:border-zinc-500'}`} />
             <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-tighter group-hover:text-zinc-300">{name}</span>
           </div>
         ))}

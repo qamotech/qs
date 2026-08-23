@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Sliders } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useAudioIntensity } from '../hooks/useAudioIntensity';
 
 const FREQUENCIES = ['60', '250', '1K', '4K', '12K'];
 const BAND_COLORS = [
@@ -11,6 +13,8 @@ const BAND_COLORS = [
 ];
 
 export default function MasterEq({ levels, onChange }: { levels: number[], onChange: (levels: number[]) => void }) {
+  const intensity = useAudioIntensity();
+
   const handleDrag = (index: number, e: React.MouseEvent<HTMLDivElement> | React.PointerEvent<HTMLDivElement>) => {
     const track = e.currentTarget;
     const rect = track.getBoundingClientRect();
@@ -54,9 +58,12 @@ export default function MasterEq({ levels, onChange }: { levels: number[], onCha
               onPointerDown={(e) => handleDrag(i, e)}
               style={{ touchAction: 'none' }}
             >
-              <div 
-                className={`absolute bottom-0 w-full bg-gradient-to-t ${BAND_COLORS[i]} rounded-full pointer-events-none transition-all duration-75 shadow-[0_0_10px_currentColor]`}
-                style={{ height: `${levels[i]}%`, color: 'inherit' }}
+              <motion.div 
+                animate={{ 
+                  boxShadow: `0 0 ${10 + intensity * 20}px ${intensity * 5}px rgba(34, 211, 238, ${intensity * 0.5})` 
+                }}
+                className={`absolute bottom-0 w-full bg-gradient-to-t ${BAND_COLORS[i]} rounded-full pointer-events-none transition-all duration-75`}
+                style={{ height: `${levels[i]}%` }}
               />
               <div 
                 className="w-6 h-6 bg-zinc-200 rounded-full shadow-[0_2px_5px_rgba(0,0,0,0.5),inset_0_2px_2px_rgba(255,255,255,0.8)] absolute left-1/2 -translate-x-1/2 -translate-y-1/2 group-hover:scale-110 transition-transform pointer-events-none border border-zinc-400"

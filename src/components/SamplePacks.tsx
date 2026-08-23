@@ -1,22 +1,31 @@
 import { Package, Check } from 'lucide-react';
 import { audioEngine } from '../audio/AudioEngine';
+import { useState } from 'react';
 
 const SAMPLE_PACKS = [
-  { id: 'classic-hiphop', name: 'Classic HipHop', color: 'bg-orange-500' },
-  { id: 'lofi-nights', name: 'Lo-Fi Nights', color: 'bg-blue-500' },
-  { id: 'rnb-grooves', name: 'RnB Grooves', color: 'bg-pink-500' },
-  { id: 'trap-essentials', name: 'Trap Essentials', color: 'bg-cyan-500' },
-  { id: 'modern-trap', name: 'Modern Trap', color: 'bg-rose-500' },
-  { id: 'drill-essential', name: 'Drill Essential', color: 'bg-emerald-500' },
-  { id: 'pop-anthem', name: 'Pop Anthem', color: 'bg-yellow-500' },
-  { id: 'future-bass', name: 'Future Bass', color: 'bg-violet-500' },
+  { id: 'classic-hiphop', name: 'Classic Boom Bap', color: 'bg-orange-500', category: 'Classic Boom Bap' },
+  { id: 'lofi-nights', name: 'Lo-Fi Nights', color: 'bg-blue-500', category: 'Modern HipHop' },
+  { id: 'rnb-grooves', name: 'RnB Grooves', color: 'bg-pink-500', category: 'Modern HipHop' },
+  { id: 'trap-essentials', name: 'Trap Essentials', color: 'bg-cyan-500', category: 'Modern HipHop' },
+  { id: 'modern-trap', name: 'Modern Trap', color: 'bg-rose-500', category: 'Modern HipHop' },
+  { id: 'drill-essential', name: 'Dark Drill', color: 'bg-emerald-500', category: 'Dark Drill' },
+  { id: 'pop-anthem', name: 'Pop Anthem', color: 'bg-yellow-500', category: 'Modern HipHop' },
+  { id: 'future-bass', name: 'Future Bass', color: 'bg-violet-500', category: 'Modern HipHop' },
 ];
 
+const CATEGORIES = ['All', ...Array.from(new Set(SAMPLE_PACKS.map(p => p.category)))];
+
 export default function SamplePacks({ activePack, onChange }: { activePack: string, onChange: (pack: string) => void }) {
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
   const handlePackChange = (id: string) => {
     audioEngine.setSamplePack(id);
     onChange(id);
   };
+
+  const filteredPacks = selectedCategory === 'All' 
+    ? SAMPLE_PACKS 
+    : SAMPLE_PACKS.filter(p => p.category === selectedCategory);
 
   return (
     <div className="bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/50 rounded-2xl p-5 shadow-2xl flex flex-col gap-4 transition-all duration-300 hover:shadow-orange-500/10">
@@ -25,8 +34,24 @@ export default function SamplePacks({ activePack, onChange }: { activePack: stri
         <h3 className="font-semibold text-zinc-200">Sample Packs</h3>
       </div>
       
+      <div className="flex gap-2 mb-2 overflow-x-auto pb-1">
+        {CATEGORIES.map(category => (
+          <button
+            key={category}
+            onClick={() => setSelectedCategory(category)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              selectedCategory === category 
+                ? 'bg-zinc-700 text-white' 
+                : 'bg-zinc-900 text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {category}
+          </button>
+        ))}
+      </div>
+      
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {SAMPLE_PACKS.map((pack) => {
+        {filteredPacks.map((pack) => {
           const isActive = activePack === pack.id;
           return (
             <button

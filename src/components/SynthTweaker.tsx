@@ -11,7 +11,7 @@ interface SynthParams {
 
 export default function SynthTweaker({ params, onChange }: { params: SynthParams, onChange: (key: keyof SynthParams, val: number) => void }) {
   return (
-    <div className="bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/50 rounded-2xl p-5 shadow-2xl transition-all duration-300 hover:shadow-fuchsia-500/10 mt-6 relative overflow-hidden">
+    <div className="bg-zinc-950/80 backdrop-blur-3xl border border-zinc-700 rounded-2xl p-6 shadow-[0_0_20px_rgba(0,0,0,0.5)] h-64 flex flex-col">
       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-fuchsia-500/0 via-fuchsia-500/50 to-fuchsia-500/0" />
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">

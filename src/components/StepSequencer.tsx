@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { ListMusic, Play, Square, Trash2, VolumeX, Headphones, Search } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ListMusic, Play, Square, Trash2, VolumeX, Headphones, Search, Maximize2, Copy, Clipboard, X, Shuffle, RotateCcw, FlipVertical, ArrowLeft, ArrowRight, Sparkles, Zap, User } from 'lucide-react';
+import AutomationLane from './AutomationLane';
+import Tooltip from './Tooltip';
+import SequencerTrack from './SequencerTrack';
 import { audioEngine } from '../audio/AudioEngine';
 import { SOUND_LIBRARY, SoundCategory } from '../audio/SoundLibrary';
 
@@ -12,10 +16,21 @@ export default function StepSequencer({
   onBpmChange,
   swing,
   onSwingChange,
+  reverbAutomation,
+  onReverbAutomationChange,
+  delayAutomation,
+  onDelayAutomationChange,
+  snapToGrid,
+  onSnapToGridChange,
+  filterType,
   trackMutes,
   onToggleMute,
   trackSolos,
   onToggleSolo,
+  trackCutSelf,
+  onToggleCutSelf,
+  trackSustain,
+  onToggleSustain,
   trackSounds,
   onTrackSoundChange,
   onClearGrid,
@@ -24,7 +39,12 @@ export default function StepSequencer({
   copyTrack,
   pasteTrack,
   clearTrack,
-  randomizeTrack
+  randomizeTrack,
+  randomizeVelocities,
+  humanizeTiming,
+  deleteAllNotes,
+  setStatus,
+  onMaximize
 }: { 
   grid: boolean[][], 
   onGridChange: (grid: boolean[][]) => void,
@@ -34,10 +54,21 @@ export default function StepSequencer({
   onBpmChange: (bpm: number) => void,
   swing: number,
   onSwingChange: (swing: number) => void,
+  reverbAutomation: number[],
+  onReverbAutomationChange: (val: number[]) => void,
+  delayAutomation: number[],
+  onDelayAutomationChange: (val: number[]) => void,
+  snapToGrid: boolean,
+  onSnapToGridChange: (snap: boolean) => void,
+  filterType: 'lowpass' | 'highpass' | 'bandpass',
   trackMutes: boolean[],
   onToggleMute: (idx: number) => void,
   trackSolos: boolean[],
   onToggleSolo: (idx: number) => void,
+  trackCutSelf: boolean[],
+  onToggleCutSelf: (idx: number) => void,
+  trackSustain: boolean[],
+  onToggleSustain: (idx: number) => void,
   trackSounds: string[],
   onTrackSoundChange: (idx: number, soundId: string) => void,
   onClearGrid: () => void,
@@ -47,33 +78,32 @@ export default function StepSequencer({
   pasteTrack: (idx: number) => void,
   clearTrack: (idx: number) => void,
   randomizeTrack: (idx: number) => void,
+  reverseTrack: (idx: number) => void,
+  invertTrack: (idx: number) => void,
+  shiftTrackLeft: (idx: number) => void,
+  shiftTrackRight: (idx: number) => void,
+  generateRiff: (idx: number) => void,
   applyChord: (idx: number, notes: string[]) => void,
+  duplicateTrack: (idx: number) => void,
+  randomizeVelocities: (idx: number) => void,
+  humanizeTiming: (idx: number) => void,
+  deleteAllNotes: (idx: number) => void,
+  setStatus: (status: string) => void,
+  onMaximize?: () => void
 }) {
   const [currentStep, setCurrentStep] = useState(0);
-  const timeoutRef = useRef<number | null>(null);
-  const [editingTrack, setEditingTrack] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [dragOverTrack, setDragOverTrack] = useState<number | null>(null);
-
-  const [contextMenu, setContextMenu] = useState<{ trackIdx: number, x: number, y: number } | null>(null);
-  const [stepEditor, setStepEditor] = useState<{ trackIdx: number, stepIdx: number, x: number, y: number } | null>(null);
-
+  
+  const workerRef = useRef<Worker | null>(null);
+  const decayRef = useRef<number | null>(null);
+  
+  // Initialize worker
   useEffect(() => {
-    const handleClickOutside = () => {
-      setContextMenu(null);
-      setStepEditor(null);
-    };
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (isPlaying) {
-      audioEngine.init();
-      
-      let step = currentStep;
-      
-      const scheduleNextStep = () => {
+    workerRef.current = new Worker(new URL('../audio/sequencer-worker.ts', import.meta.url));
+    workerRef.current.onmessage = (e) => {
+      if (e.data.type === 'tick') {
+        const step = e.data.step;
+        setCurrentStep(step);
+        
         const anySolo = trackSolos.some(s => s);
         
         // Play sounds for the current step
@@ -91,45 +121,80 @@ export default function StepSequencer({
 
             if (shouldPlay) {
               audioEngine.playSound(trackIdx, trackSounds[trackIdx]);
+              triggerPeak(trackIdx);
             }
           }
         });
-
-        const nextStep = (step + 1) % 16;
-        setCurrentStep(nextStep);
-        step = nextStep;
         
-        const baseDelay = 60000 / (bpm * 4); // 16th note in ms
-        let delay = baseDelay;
-        
-        // Swing logic: if the next step is an off-beat (odd number), delay it. If it's an on-beat, shorten the previous delay.
-        // Actually, it's easier to just adjust the delay to the next step.
-        // If current step is even, the delay to the next step (odd) is lengthened.
-        // If current step is odd, the delay to the next step (even) is shortened.
-        const swingFactor = swing / 100; // 0 to 1
-        const maxSwing = baseDelay * 0.6; // max delay added
-        
-        if (step % 2 === 1) { // next step is odd
-          delay += swingFactor * maxSwing;
-        } else { // next step is even
-          delay -= swingFactor * maxSwing;
-        }
-
-        timeoutRef.current = window.setTimeout(scheduleNextStep, delay);
-      };
-
-      // Start immediately
-      scheduleNextStep();
-    } else {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+        audioEngine.setEffects(reverbAutomation[step], delayAutomation[step], filterType);
       }
-    }
-    
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [isPlaying, grid, bpm, swing, trackMutes, trackSolos]);
+    return () => {
+      workerRef.current?.terminate();
+    };
+  }, []);
+
+  // Sync worker with state
+  useEffect(() => {
+    if (isPlaying) {
+      audioEngine.init();
+      workerRef.current?.postMessage({ type: 'start', bpm, swing, step: currentStep });
+    } else {
+      workerRef.current?.postMessage({ type: 'stop' });
+    }
+  }, [isPlaying, bpm, swing]);
+  
+  // Decay peak levels
+  useEffect(() => {
+    let activePeaks = new Array(8).fill(0);
+    const decay = () => {
+      let needsUpdate = false;
+      for (let i = 0; i < 8; i++) {
+        if (activePeaks[i] > 0) {
+          activePeaks[i] = Math.max(0, activePeaks[i] - 0.1);
+          needsUpdate = true;
+          const el = document.getElementById(`peak-meter-${i}`);
+          if (el) el.style.height = `${activePeaks[i] * 100}%`;
+        }
+      }
+      decayRef.current = requestAnimationFrame(decay);
+    };
+    decayRef.current = requestAnimationFrame(decay);
+    
+    // Assign global peak trigger
+    (window as any).__triggerPeak = (idx: number) => {
+      activePeaks[idx] = 1;
+      const el = document.getElementById(`peak-meter-${idx}`);
+      if (el) el.style.height = '100%';
+    };
+
+    return () => {
+      if (decayRef.current) cancelAnimationFrame(decayRef.current);
+      delete (window as any).__triggerPeak;
+    };
+  }, []);
+
+  const triggerPeak = (trackIdx: number) => {
+    if ((window as any).__triggerPeak) {
+      (window as any).__triggerPeak(trackIdx);
+    }
+  };
+
+  const [editingTrack, setEditingTrack] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dragOverTrack, setDragOverTrack] = useState<number | null>(null);
+
+  const [contextMenu, setContextMenu] = useState<{ trackIdx: number, x: number, y: number } | null>(null);
+  const [stepEditor, setStepEditor] = useState<{ trackIdx: number, stepIdx: number, x: number, y: number } | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setContextMenu(null);
+      setStepEditor(null);
+    };
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const toggleCell = (trackIdx: number, stepIdx: number) => {
     audioEngine.init();
@@ -147,6 +212,7 @@ export default function StepSequencer({
       
       if (shouldPlay) {
         audioEngine.playSound(trackIdx, trackSounds[trackIdx]);
+        triggerPeak(trackIdx);
       }
     }
     
@@ -154,139 +220,146 @@ export default function StepSequencer({
   };
 
   return (
-    <div className="bg-zinc-950/60 backdrop-blur-xl border border-zinc-800/50 rounded-2xl p-5 shadow-2xl transition-all duration-300 hover:shadow-cyan-500/10 flex flex-col gap-4">
-      <div className="flex items-center gap-2 mb-2">
-        <ListMusic className="w-5 h-5 text-emerald-400" />
-        <h3 className="font-semibold text-zinc-200">Step Sequencer</h3>
+    <div className="bg-zinc-950/80 backdrop-blur-xl border border-white/5 rounded-2xl p-5 shadow-2xl transition-all duration-300 flex flex-col gap-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <ListMusic className="w-5 h-5 text-emerald-400" />
+          <h3 className="font-semibold text-zinc-200">Step Sequencer</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => onSnapToGridChange(!snapToGrid)}
+            className={`px-2 py-1 rounded text-[10px] font-bold ${snapToGrid ? 'bg-cyan-900 text-cyan-300' : 'bg-zinc-800 text-zinc-500'}`}
+          >
+            SNAP: {snapToGrid ? 'ON' : 'OFF'}
+          </button>
+          {onMaximize && (
+            <button onClick={onMaximize} className="p-1.5 hover:bg-zinc-800 rounded-md text-zinc-400 hover:text-white transition-colors">
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="flex flex-col gap-2 relative">
-        {grid.map((_, trackIdx) => (
-          <div key={trackIdx} className="flex flex-col gap-1 relative">
-            <div 
-              className={`flex items-center gap-2 md:gap-4 p-1 rounded transition-colors ${dragOverTrack === trackIdx ? 'bg-cyan-500/20 border border-cyan-500' : ''}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOverTrack(trackIdx);
-              }}
-              onDragLeave={() => setDragOverTrack(null)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOverTrack(null);
-                try {
-                  const data = JSON.parse(e.dataTransfer.getData('application/json'));
-                  if (data.type === 'chord' && data.notes) {
-                    applyChord(trackIdx, data.notes);
-                  }
-                } catch (err) {}
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setContextMenu({ trackIdx, x: e.clientX, y: e.clientY });
-              }}
-              onTouchStart={(e) => {
-                const touch = e.touches[0];
-                timeoutRef.current = window.setTimeout(() => {
-                  setContextMenu({ trackIdx, x: touch.clientX, y: touch.clientY });
-                }, 500);
-              }}
-              onTouchEnd={() => {
-                if (timeoutRef.current) clearTimeout(timeoutRef.current);
-              }}
-              onTouchMove={() => {
-                if (timeoutRef.current) clearTimeout(timeoutRef.current);
-              }}
-            >
-              <div 
-                className="w-24 flex items-center justify-between cursor-pointer hover:bg-zinc-800 p-1 rounded transition-colors"
-                onClick={() => {
-                  if (editingTrack === trackIdx) setEditingTrack(null);
-                  else {
-                    setEditingTrack(trackIdx);
-                    setSearchQuery('');
-                  }
+      <div className="flex flex-col gap-2 relative bg-zinc-950 p-3 rounded-xl border border-zinc-800/80 shadow-[inset_0_4px_20px_rgba(0,0,0,0.5)]">
+        {grid.map((track, trackIdx) => (
+          <div key={trackIdx} className="relative">
+            <SequencerTrack
+                trackIdx={trackIdx}
+                steps={track}
+                currentStep={currentStep}
+                trackMute={trackMutes[trackIdx]}
+                trackSolo={trackSolos[trackIdx]}
+                trackSustain={trackSustain[trackIdx]}
+                trackSound={trackSounds[trackIdx]}
+                onToggleCell={(stepIdx) => toggleCell(trackIdx, stepIdx)}
+                onToggleMute={() => onToggleMute(trackIdx)}
+                onToggleSolo={() => onToggleSolo(trackIdx)}
+                onClear={() => clearTrack(trackIdx)}
+                onRandomize={() => randomizeTrack(trackIdx)}
+                onTrackEdit={() => {
+                    if (editingTrack === trackIdx) setEditingTrack(null);
+                    else {
+                        setEditingTrack(trackIdx);
+                        setSearchQuery('');
+                    }
                 }}
-              >
-                <span className="text-[10px] font-bold text-zinc-300 truncate w-full" title={SOUND_LIBRARY.find(s => s.id === trackSounds[trackIdx])?.name || 'Sound'}>
-                  {SOUND_LIBRARY.find(s => s.id === trackSounds[trackIdx])?.name || 'Sound'}
-                </span>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button 
-                  onClick={() => onToggleMute(trackIdx)}
-                  className={`w-6 h-6 flex items-center justify-center rounded-full border transition-all ${trackMutes[trackIdx] ? 'bg-red-500 border-red-400 text-white shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-zinc-900 border-zinc-800 text-zinc-600 hover:text-zinc-400'}`}
-                  title="Mute"
-                >
-                  <span className="text-[10px] font-bold tracking-tighter">M</span>
-                </button>
-                <button 
-                  onClick={() => onToggleSolo(trackIdx)}
-                  className={`w-6 h-6 flex items-center justify-center rounded-full border transition-all ${trackSolos[trackIdx] ? 'bg-yellow-500 border-yellow-400 text-zinc-900 shadow-[0_0_10px_rgba(234,179,8,0.8)]' : 'bg-zinc-900 border-zinc-800 text-zinc-600 hover:text-zinc-400'}`}
-                  title="Solo"
-                >
-                  <span className="text-[10px] font-bold tracking-tighter">S</span>
-                </button>
-              </div>
-              <div className="flex-1 grid grid-cols-[16] gap-1" style={{ gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
-                {grid[trackIdx].map((isActive, stepIdx) => (
-                  <div
-                    key={stepIdx}
-                    onClick={() => toggleCell(trackIdx, stepIdx)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (isActive) {
+                onSetStepEditor={(stepIdx, e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (grid[trackIdx][stepIdx]) {
                         setStepEditor({ trackIdx, stepIdx, x: e.clientX, y: e.clientY });
-                      }
-                    }}
-                    className={`
-                      aspect-[4/5] rounded bg-zinc-900 border cursor-pointer transition-all relative overflow-hidden
-                      ${isActive ? 'bg-emerald-500 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.5)] scale-[1.05]' : 'border-zinc-800 hover:bg-zinc-800'}
-                      ${stepIdx % 4 === 0 && !isActive ? 'bg-zinc-800/80' : ''}
-                    `}
-                  >
-                    {currentStep === stepIdx && (
-                      <div className="absolute inset-0 bg-white/30 rounded border border-white/50 pointer-events-none shadow-[inset_0_0_15px_rgba(255,255,255,0.4)]" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+                    }
+                }}
+                onTrackContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({ trackIdx, x: e.clientX, y: e.clientY });
+                }}
+                onDragEnter={() => setDragOverTrack(trackIdx)}
+                onDragLeave={() => setDragOverTrack(null)}
+            />
 
             {editingTrack === trackIdx && (
-              <div className="absolute left-24 top-full mt-2 p-3 bg-zinc-800 border border-zinc-600 rounded-lg shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 w-[300px] md:w-[400px]">
-                <div className="flex items-center gap-2 bg-zinc-950 px-2 py-1 rounded border border-zinc-700 mb-2">
-                  <Search className="w-4 h-4 text-zinc-500" />
+              <div className="absolute left-24 top-full mt-2 p-3 bg-zinc-900/95 backdrop-blur-xl border border-zinc-700/80 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.8)] z-[101] animate-in fade-in zoom-in-95 w-[300px] md:w-[400px]">
+                <div className="flex items-center gap-2 bg-zinc-950 px-3 py-2 rounded-lg border border-zinc-800 mb-3 shadow-inner focus-within:border-emerald-500/50 transition-colors">
+                  <Search className="w-4 h-4 text-emerald-500" />
                   <input 
                     type="text"
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     placeholder="Search sounds..."
-                    className="bg-transparent text-sm text-zinc-200 outline-none w-full"
+                    className="bg-transparent text-sm text-zinc-200 outline-none w-full placeholder:text-zinc-600"
                     autoFocus
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                  {SOUND_LIBRARY.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.category.toLowerCase().includes(searchQuery.toLowerCase())).map(sound => (
-                    <button
-                      key={sound.id}
-                      onClick={() => {
-                        audioEngine.init();
-                        onTrackSoundChange(trackIdx, sound.id);
-                        audioEngine.playSound(trackIdx, sound.id);
-                        setEditingTrack(null);
-                      }}
-                      className={`text-left px-2 py-1.5 rounded text-xs transition-colors truncate ${trackSounds[trackIdx] === sound.id ? 'bg-cyan-500/20 text-cyan-400 font-bold border border-cyan-500/50' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
-                      title={sound.name}
-                    >
-                      {sound.name}
-                    </button>
+                <div className="grid grid-cols-1 gap-1 max-h-64 overflow-y-auto pr-1">
+                  {[...SOUND_LIBRARY]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()) || s.category.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .map(sound => (
+                    <div key={sound.id} className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          audioEngine.playSound(trackIdx, sound.id);
+                        }}
+                        onMouseEnter={() => setStatus(`Preview: ${sound.name}`)}
+                        onMouseLeave={() => setStatus('')}
+                        className="p-1.5 rounded bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800"
+                        title="Preview"
+                      >
+                        <Headphones className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          audioEngine.init();
+                          onTrackSoundChange(trackIdx, sound.id);
+                          audioEngine.playSound(trackIdx, sound.id);
+                          setEditingTrack(null);
+                        }}
+                        onMouseEnter={() => setStatus(`Select: ${sound.name}`)}
+                        onMouseLeave={() => setStatus('')}
+                        className={`flex-1 text-left px-2 py-1.5 rounded text-xs transition-colors truncate ${trackSounds[trackIdx] === sound.id ? 'bg-purple-900/40 text-purple-300 font-bold border border-purple-900' : 'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'}`}
+                        title={sound.name}
+                      >
+                        {sound.name}
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
         ))}
+      </div>
+      
+      <div className="mt-6 flex flex-col gap-3 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800">
+          <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Reverb Wet Level</div>
+          <div className="flex gap-1 h-12 items-end">
+            {reverbAutomation.map((val, stepIdx) => (
+              <div key={stepIdx} className={`flex-1 bg-zinc-800 rounded-sm relative group ${currentStep === stepIdx ? 'ring-1 ring-cyan-500' : ''}`} style={{ height: '100%' }}>
+                  <input type="range" min="0" max="100" value={val} onChange={(e) => {
+                    const newAuto = [...reverbAutomation];
+                    newAuto[stepIdx] = parseInt(e.target.value);
+                    onReverbAutomationChange(newAuto);
+                  }} className="absolute inset-0 opacity-0 cursor-ns-resize" />
+                  <div className={`absolute bottom-0 left-0 right-0 ${currentStep === stepIdx ? 'bg-purple-400' : 'bg-purple-500'} rounded-sm transition-all`} style={{ height: `${val}%` }} />
+              </div>
+            ))}
+          </div>
+          <div className="text-xs font-bold text-zinc-500 uppercase tracking-widest mt-2">Delay Wet Level</div>
+          <div className="flex gap-1 h-12 items-end">
+            {delayAutomation.map((val, stepIdx) => (
+              <div key={stepIdx} className={`flex-1 bg-zinc-800 rounded-sm relative group ${currentStep === stepIdx ? 'ring-1 ring-cyan-500' : ''}`} style={{ height: '100%' }}>
+                  <input type="range" min="0" max="100" value={val} onChange={(e) => {
+                    const newAuto = [...delayAutomation];
+                    newAuto[stepIdx] = parseInt(e.target.value);
+                    onDelayAutomationChange(newAuto);
+                  }} className="absolute inset-0 opacity-0 cursor-ns-resize" />
+                  <div className={`absolute bottom-0 left-0 right-0 ${currentStep === stepIdx ? 'bg-cyan-400' : 'bg-cyan-500'} rounded-sm transition-all`} style={{ height: `${val}%` }} />
+              </div>
+            ))}
+          </div>
       </div>
       
       <button 
@@ -305,14 +378,25 @@ export default function StepSequencer({
           <div className="px-2 py-1 text-xs font-bold text-zinc-500 uppercase tracking-widest border-b border-zinc-800 mb-1">
             Track Options
           </div>
-          <button onClick={() => { copyTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">Copy Track</button>
-          <button onClick={() => { pasteTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">Paste Track</button>
-          <button onClick={() => { clearTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">Clear Pattern</button>
-          <button onClick={() => { randomizeTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">Randomize</button>
-          <button onClick={() => { onToggleMute(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">{trackMutes[contextMenu.trackIdx] ? 'Unmute' : 'Mute'} Track</button>
-          <button onClick={() => { onToggleSolo(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded">{trackSolos[contextMenu.trackIdx] ? 'Unsolo' : 'Solo'} Track</button>
+          <button onClick={() => { copyTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><Copy className="w-3.5 h-3.5" />Copy Track</button>
+          <button onClick={() => { pasteTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><Clipboard className="w-3.5 h-3.5" />Paste Track</button>
+          <button onClick={() => { clearTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><X className="w-3.5 h-3.5" />Clear Pattern</button>
+          <button onClick={() => { randomizeTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><Shuffle className="w-3.5 h-3.5" />Randomize</button>
+          <button onClick={() => { reverseTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><RotateCcw className="w-3.5 h-3.5" />Reverse</button>
+          <button onClick={() => { invertTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><FlipVertical className="w-3.5 h-3.5" />Invert</button>
+          <button onClick={() => { shiftTrackLeft(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><ArrowLeft className="w-3.5 h-3.5" />Shift Left</button>
+          <button onClick={() => { shiftTrackRight(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><ArrowRight className="w-3.5 h-3.5" />Shift Right</button>
+          <button onClick={() => { generateRiff(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-cyan-400 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><Sparkles className="w-3.5 h-3.5" />Generate Riff</button>
+          <button onClick={() => { duplicateTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><Copy className="w-3.5 h-3.5" />Duplicate Track</button>
+          <button onClick={() => { randomizeVelocities(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><Zap className="w-3.5 h-3.5" />Randomize Velocities</button>
+          <button onClick={() => { humanizeTiming(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><User className="w-3.5 h-3.5" />Humanize Timing</button>
+          <button onClick={() => { deleteAllNotes(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-red-400 hover:bg-zinc-800 hover:text-red-300 rounded flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" />Delete All Notes</button>
+          <button onClick={() => { onToggleMute(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><VolumeX className="w-3.5 h-3.5" />{trackMutes[contextMenu.trackIdx] ? 'Unmute' : 'Mute'} Track</button>
+          <button onClick={() => { onToggleSolo(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2"><Headphones className="w-3.5 h-3.5" />{trackSolos[contextMenu.trackIdx] ? 'Unsolo' : 'Solo'} Track</button>
+          <button onClick={() => { onToggleCutSelf(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2">Cut Self</button>
+          <button onClick={() => { onToggleSustain(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded flex items-center gap-2">Add Sustain</button>
           <div className="h-px bg-zinc-800 my-1" />
-          <button onClick={() => { removeTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded">Remove Track</button>
+          <button onClick={() => { removeTrack(contextMenu.trackIdx); setContextMenu(null); }} className="w-full text-left px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/20 rounded flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" />Remove Track</button>
         </div>
       )}
       {stepEditor && (

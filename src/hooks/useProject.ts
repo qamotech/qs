@@ -9,10 +9,15 @@ export interface ProjectData {
   volume: number;
   swing: number;
   reverb: number;
+  reverbAutomation: number[];
   delay: number;
+  delayAutomation: number[];
+  masterAutomation: number[];
   trackMutes: boolean[];
   trackSolos: boolean[];
   trackSounds: string[];
+  trackCutSelf: boolean[];
+  trackSustain: boolean[];
   filterType: 'lowpass' | 'highpass' | 'bandpass';
   sequencerGrid: boolean[][];
   synthParams: {
@@ -23,23 +28,41 @@ export interface ProjectData {
   };
   eqLevels: number[];
   pannerPosition: { x: number; y: number };
+  midiMappings: Record<string, number>;
+  snapToGrid: boolean;
 }
 
 const DEFAULT_PROJECT: ProjectData = {
   activePack: 'classic-hiphop',
-  bpm: 100,
+  bpm: 120,
   volume: 80,
-  swing: 0,
-  reverb: 0,
-  delay: 0,
-  trackMutes: [false, false, false, false],
-  trackSolos: [false, false, false, false],
-  trackSounds: ['classic-kick', 'classic-snare', 'classic-hihat', 'saw-bass'],
+  swing: 20,
+  reverb: 30,
+  reverbAutomation: Array(16).fill(30),
+  delay: 15,
+  delayAutomation: Array(16).fill(15),
+  masterAutomation: Array(16).fill(80),
+  trackMutes: [false, false, false, false, false, false, false, false],
+  trackSolos: [false, false, false, false, false, false, false, false],
+  trackSounds: ['deep-kick', 'classic-snare', 'closed-hat', 'open-hat', 'violin-legato', 'cello-deep', 'trumpet-bright', 'tuba-low'],
+  trackCutSelf: [true, true, true, true, true, true, true, true],
+  trackSustain: [false, false, false, false, false, false, false, false],
   filterType: 'lowpass',
-  sequencerGrid: DEFAULT_GRID,
-  synthParams: { cutoff: 70, resonance: 30, envMod: 50, decay: 40 },
-  eqLevels: [50, 60, 40, 70, 50],
-  pannerPosition: { x: 50, y: 50 }
+  sequencerGrid: [
+    [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false], // Kick
+    [false, false, false, false, true, false, false, false, false, false, false, false, true, false, false, false], // Snare
+    [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true], // Closed Hat
+    [false, false, false, false, false, false, false, true, false, false, false, false, false, false, false, true], // Open Hat
+    [true, false, false, true, false, true, false, false, true, false, true, false, true, false, false, false], // Violin (Melody)
+    [true, false, false, false, true, false, false, false, true, false, false, false, true, false, false, false], // Cello (Bass)
+    [false, false, true, false, false, false, true, false, false, false, true, false, false, false, true, false], // Trumpet
+    [true, false, false, false, false, false, false, false, true, false, false, false, false, false, false, false], // Tuba
+  ],
+  synthParams: { cutoff: 60, resonance: 30, envMod: 50, decay: 70 },
+  eqLevels: [70, 50, 40, 60, 80],
+  pannerPosition: { x: 50, y: 50 },
+  midiMappings: {},
+  snapToGrid: true
 };
 
 const MAX_HISTORY = 50;
@@ -51,21 +74,64 @@ export function useProject() {
   const historyRef = useRef<ProjectData[]>([DEFAULT_PROJECT]);
   const historyIndexRef = useRef<number>(0);
 
+  const [history, setHistory] = useState<ProjectData[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const updateHistoryState = useCallback(() => {
     setCanUndo(historyIndexRef.current > 0);
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1);
+    setHistory([...historyRef.current]);
+    setCurrentIndex(historyIndexRef.current);
   }, []);
+
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    const ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+      console.log('Connected to WebSocket server for collaboration');
+    };
+    
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'update' && data.payload) {
+          setProject(data.payload);
+          // Optional: Add to history or just update the view
+          historyRef.current = [data.payload];
+          historyIndexRef.current = 0;
+          updateHistoryState();
+        }
+      } catch (err) {
+        console.error('Failed to parse WS message', err);
+      }
+    };
+    
+    wsRef.current = ws;
+    
+    return () => {
+      ws.close();
+    };
+  }, [updateHistoryState]);
 
   useEffect(() => {
     const saved = localStorage.getItem('qamelot-project');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        setProject({ ...DEFAULT_PROJECT, ...parsed });
-        historyRef.current = [{ ...DEFAULT_PROJECT, ...parsed }];
+        const mergedProject = { ...DEFAULT_PROJECT, ...parsed };
+        // Ensure essential arrays are initialized
+        mergedProject.sequencerGrid = parsed.sequencerGrid || DEFAULT_PROJECT.sequencerGrid;
+        mergedProject.trackCutSelf = parsed.trackCutSelf || DEFAULT_PROJECT.trackCutSelf;
+        mergedProject.trackSustain = parsed.trackSustain || DEFAULT_PROJECT.trackSustain;
+        
+        setProject(mergedProject);
+        historyRef.current = [mergedProject];
         historyIndexRef.current = 0;
         updateHistoryState();
       } catch (e) {
@@ -90,6 +156,11 @@ export function useProject() {
     setProject(prev => {
       const next = updater(prev);
       saveToHistory(next);
+      
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'update', payload: next }));
+      }
+      
       return next;
     });
   }, [saveToHistory]);
@@ -106,6 +177,14 @@ export function useProject() {
     if (historyIndexRef.current < historyRef.current.length - 1) {
       historyIndexRef.current += 1;
       setProject(historyRef.current[historyIndexRef.current]);
+      updateHistoryState();
+    }
+  }, [updateHistoryState]);
+
+  const jumpTo = useCallback((index: number) => {
+    if (index >= 0 && index < historyRef.current.length) {
+      historyIndexRef.current = index;
+      setProject(historyRef.current[index]);
       updateHistoryState();
     }
   }, [updateHistoryState]);
@@ -177,8 +256,20 @@ export function useProject() {
     setProjectWithHistory(p => ({ ...p, reverb }));
   }, [setProjectWithHistory]);
 
+  const updateReverbAutomation = useCallback((reverbAutomation: number[]) => {
+    setProjectWithHistory(p => ({ ...p, reverbAutomation }));
+  }, [setProjectWithHistory]);
+
   const updateDelay = useCallback((delay: number) => {
     setProjectWithHistory(p => ({ ...p, delay }));
+  }, [setProjectWithHistory]);
+
+  const updateDelayAutomation = useCallback((delayAutomation: number[]) => {
+    setProjectWithHistory(p => ({ ...p, delayAutomation }));
+  }, [setProjectWithHistory]);
+
+  const updateMasterAutomation = useCallback((masterAutomation: number[]) => {
+    setProjectWithHistory(p => ({ ...p, masterAutomation }));
   }, [setProjectWithHistory]);
 
   const toggleTrackMute = useCallback((trackIdx: number) => {
@@ -186,6 +277,22 @@ export function useProject() {
       const newMutes = [...p.trackMutes];
       newMutes[trackIdx] = !newMutes[trackIdx];
       return { ...p, trackMutes: newMutes };
+    });
+  }, [setProjectWithHistory]);
+
+  const toggleTrackCutSelf = useCallback((trackIdx: number) => {
+    setProjectWithHistory(p => {
+      const newCutSelf = [...p.trackCutSelf];
+      newCutSelf[trackIdx] = !newCutSelf[trackIdx];
+      return { ...p, trackCutSelf: newCutSelf };
+    });
+  }, [setProjectWithHistory]);
+
+  const toggleTrackSustain = useCallback((trackIdx: number) => {
+    setProjectWithHistory(p => {
+      const newSustain = [...p.trackSustain];
+      newSustain[trackIdx] = !newSustain[trackIdx];
+      return { ...p, trackSustain: newSustain };
     });
   }, [setProjectWithHistory]);
 
@@ -210,8 +317,10 @@ export function useProject() {
       const newMutes = [...p.trackMutes, false];
       const newSolos = [...p.trackSolos, false];
       const newSounds = [...p.trackSounds, 'classic-perc'];
+      const newCutSelf = [...p.trackCutSelf, false];
+      const newSustain = [...p.trackSustain, false];
       const newGrid = [...p.sequencerGrid, Array(16).fill(false)];
-      return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackSounds: newSounds, sequencerGrid: newGrid };
+      return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackSounds: newSounds, trackCutSelf: newCutSelf, trackSustain: newSustain, sequencerGrid: newGrid };
     });
   }, [setProjectWithHistory]);
 
@@ -221,8 +330,10 @@ export function useProject() {
       const newMutes = p.trackMutes.filter((_, i) => i !== trackIdx);
       const newSolos = p.trackSolos.filter((_, i) => i !== trackIdx);
       const newSounds = p.trackSounds.filter((_, i) => i !== trackIdx);
+      const newCutSelf = p.trackCutSelf.filter((_, i) => i !== trackIdx);
+      const newSustain = p.trackSustain.filter((_, i) => i !== trackIdx);
       const newGrid = p.sequencerGrid.filter((_, i) => i !== trackIdx);
-      return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackSounds: newSounds, sequencerGrid: newGrid };
+      return { ...p, trackMutes: newMutes, trackSolos: newSolos, trackSounds: newSounds, trackCutSelf: newCutSelf, trackSustain: newSustain, sequencerGrid: newGrid };
     });
   }, [setProjectWithHistory]);
 
@@ -266,6 +377,91 @@ export function useProject() {
       return { ...p, sequencerGrid: newGrid };
     });
   }, [setProjectWithHistory]);
+
+  const generateRiff = useCallback((trackIdx: number) => {
+    setProjectWithHistory(p => {
+      const newGrid = [...p.sequencerGrid];
+      const pattern = Array(16).fill(false);
+      // Rhythmic base
+      for(let i=0; i<16; i+=4) pattern[i] = true;
+      // Random extras
+      for(let i=0; i<16; i++) {
+        if (!pattern[i] && Math.random() > 0.7) pattern[i] = true;
+      }
+      newGrid[trackIdx] = pattern;
+      return { ...p, sequencerGrid: newGrid };
+    });
+  }, [setProjectWithHistory]);
+
+  const reverseTrack = useCallback((trackIdx: number) => {
+    setProjectWithHistory(p => {
+      const newGrid = [...p.sequencerGrid];
+      newGrid[trackIdx] = [...newGrid[trackIdx]].reverse();
+      return { ...p, sequencerGrid: newGrid };
+    });
+  }, [setProjectWithHistory]);
+
+  const invertTrack = useCallback((trackIdx: number) => {
+    setProjectWithHistory(p => {
+      const newGrid = [...p.sequencerGrid];
+      newGrid[trackIdx] = newGrid[trackIdx].map(cell => !cell);
+      return { ...p, sequencerGrid: newGrid };
+    });
+  }, [setProjectWithHistory]);
+
+  const shiftTrackLeft = useCallback((trackIdx: number) => {
+    setProjectWithHistory(p => {
+      const newGrid = [...p.sequencerGrid];
+      const track = [...newGrid[trackIdx]];
+      track.push(track.shift()!);
+      newGrid[trackIdx] = track;
+      return { ...p, sequencerGrid: newGrid };
+    });
+  }, [setProjectWithHistory]);
+
+  const shiftTrackRight = useCallback((trackIdx: number) => {
+    setProjectWithHistory(p => {
+      const newGrid = [...p.sequencerGrid];
+      const track = [...newGrid[trackIdx]];
+      track.unshift(track.pop()!);
+      newGrid[trackIdx] = track;
+      return { ...p, sequencerGrid: newGrid };
+    });
+  }, [setProjectWithHistory]);
+
+  const duplicateTrack = useCallback((trackIdx: number) => {
+    setProjectWithHistory(p => {
+      const newGrid = [...p.sequencerGrid];
+      const newSounds = [...p.trackSounds];
+      const newMutes = [...p.trackMutes];
+      const newSolos = [...p.trackSolos];
+      const newCutSelf = [...p.trackCutSelf];
+      const newSustain = [...p.trackSustain];
+      
+      newGrid.splice(trackIdx + 1, 0, [...newGrid[trackIdx]]);
+      newSounds.splice(trackIdx + 1, 0, newSounds[trackIdx]);
+      newMutes.splice(trackIdx + 1, 0, newMutes[trackIdx]);
+      newSolos.splice(trackIdx + 1, 0, newSolos[trackIdx]);
+      newCutSelf.splice(trackIdx + 1, 0, newCutSelf[trackIdx]);
+      newSustain.splice(trackIdx + 1, 0, newSustain[trackIdx]);
+      
+      return { ...p, sequencerGrid: newGrid, trackSounds: newSounds, trackMutes: newMutes, trackSolos: newSolos, trackCutSelf: newCutSelf, trackSustain: newSustain };
+    });
+  }, [setProjectWithHistory]);
+
+  const randomizeVelocities = useCallback((trackIdx: number) => {
+    // Placeholder - would need velocity data structure
+    console.log('Randomize Velocities for track', trackIdx);
+  }, []);
+
+  const humanizeTiming = useCallback((trackIdx: number) => {
+    // Placeholder - would need timing offset data structure
+    console.log('Humanize Timing for track', trackIdx);
+  }, []);
+
+  const deleteAllNotes = useCallback((trackIdx: number) => {
+    clearTrack(trackIdx);
+  }, [clearTrack]);
 
   const applyChord = useCallback((trackIdx: number, notes: string[]) => {
     setProjectWithHistory(p => {
@@ -324,6 +520,17 @@ export function useProject() {
     setProjectWithHistory(p => ({ ...p, pannerPosition: pos }));
   }, [setProjectWithHistory]);
 
+  const updateMidiMapping = useCallback((uiId: string, ccNumber: number) => {
+    setProjectWithHistory(p => ({ 
+      ...p, 
+      midiMappings: { ...p.midiMappings, [uiId]: ccNumber } 
+    }));
+  }, [setProjectWithHistory]);
+
+  const updateSnapToGrid = useCallback((snapToGrid: boolean) => {
+    setProjectWithHistory(p => ({ ...p, snapToGrid }));
+  }, [setProjectWithHistory]);
+
   const generateRandomPattern = useCallback(() => {
     const newGrid = DEFAULT_GRID.map(track => track.map(() => false));
     // Kick: 4 on the floor + some variations
@@ -367,16 +574,26 @@ export function useProject() {
     updateVolume,
     updateSwing,
     updateReverb,
+    updateReverbAutomation,
     updateDelay,
+    updateDelayAutomation,
+    updateMasterAutomation,
     toggleTrackMute,
     toggleTrackSolo,
+    toggleTrackCutSelf,
+    toggleTrackSustain,
     updateTrackSound,
     updateFilterType,
     updateSequencerGrid,
     updateSynthParams,
     updateEqLevels,
     updatePannerPosition,
+    updateMidiMapping,
+    updateSnapToGrid,
     generateRandomPattern,
+    history,
+    currentIndex,
+    jumpTo,
     undo,
     redo,
     canUndo,
@@ -387,6 +604,15 @@ export function useProject() {
     pasteTrack,
     clearTrack,
     randomizeTrack,
-    applyChord
+    reverseTrack,
+    invertTrack,
+    shiftTrackLeft,
+    shiftTrackRight,
+    generateRiff,
+    applyChord,
+    duplicateTrack,
+    randomizeVelocities,
+    humanizeTiming,
+    deleteAllNotes
   };
 }
