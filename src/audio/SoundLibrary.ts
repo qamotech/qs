@@ -314,4 +314,14 @@ addSynth('Ambient Bell', 1175, 2.8, 'sine', 5200);
 addSynth('Solar Pad', 220, 4.2, 'sawtooth', 620);
 addSynth('Mono Lead', 880, 0.46, 'sawtooth', 4300);
 
+// Island Beat voices use a dedicated layered renderer in AudioEngine for a fuller, modern sound.
+SOUND_LIBRARY.push(
+  { id: 'island-kick', name: 'Island Kick', category: 'Kick', type: 'osc', oscType: 'sine', baseFreq: 55, decay: 0.5, sweep: 0.4, attack: 0.003 },
+  { id: 'island-clap', name: 'Palm Clap', category: 'Clap', type: 'noise', noiseColor: 'pink', baseFreq: 220, decay: 0.2, filterType: 'bandpass', filterFreq: 1500, filterQ: 0.65, attack: 0.003 },
+  { id: 'island-shaker', name: 'Island Shaker', category: 'Perc', type: 'noise', noiseColor: 'pink', baseFreq: 0, decay: 0.1, filterType: 'highpass', filterFreq: 5200, filterQ: 0.9, attack: 0.003 },
+  { id: 'island-conga', name: 'Island Conga', category: 'Perc', type: 'osc', oscType: 'sine', baseFreq: 185, decay: 0.3, sweep: 0.82, attack: 0.004 },
+  { id: 'island-sub', name: 'Island Sub', category: 'Synth', type: 'osc', oscType: 'sine', baseFreq: 49, decay: 0.75, filterType: 'lowpass', filterFreq: 240, filterQ: 1, attack: 0.006 },
+  { id: 'island-mallet', name: 'Tropical Mallet', category: 'Synth', type: 'osc', oscType: 'triangle', baseFreq: 523, decay: 0.5, filterType: 'lowpass', filterFreq: 4200, filterQ: 1.2, attack: 0.004 },
+);
+
 export const getSoundPreset = (id: string) => SOUND_LIBRARY.find(s => s.id === id) || SOUND_LIBRARY[0];

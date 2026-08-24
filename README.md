@@ -1,73 +1,60 @@
 # Qamelot Studio
 
-**Qamelot Studio** is a professional-grade, premastered audio production workstation designed for HipHop, Pop, and RnB. It provides a browser-based, high-performance environment for beat-making, sound design, and master-level processing.
+Qamelot Studio is a React and Web Audio API production workstation for browser and Capacitor Android use. It combines a 16-step sequencer, live performance pads, piano riff recording, sound design, mixing, and local project management.
 
-Originally built with [Google AI Studio](https://ai.studio/apps/38175002-35cb-4ce5-83e5-e855bfa39b84).
+## Current capabilities
 
-![Qamelot Studio UI](assets/screenshot.png) *(Note: Add your own screenshot to assets/screenshot.png)*
+- **Sequencer Pro:** 16-step patterns, probability, ratchets, per-step pitch/velocity, track length, swing, named patterns, scenes, and arrangement sections.
+- **Performance:** customizable trap pads, piano riff recorder, computer keyboard input, Web MIDI input where supported, sustain pedal, scales, quantization, arpeggiation, and riff-to-sequencer drag/drop.
+- **Sound design:** ADSR, waveform selection, unison, detune, filter envelope, glide, drive, modulation, width, pump, and local one-shot preview.
+- **Mixing:** 5-band master EQ, track mixer controls, track groups, master meter, limiter ceiling/release, and mastering starting points.
+- **Projects:** autosave, undo/redo, named local slots, and versioned project-document migration.
+- **Android:** Capacitor wrapper and custom Qamelot launcher assets.
 
-## 🚀 Key Features
+## Stack
 
-### 🥁 Creative Sequencing
-- **16-Step Sequencer**: Precision grid with per-track volume, mute/solo, and customizable sounds.
-- **AI Beatbox & Riff Generator**: Generate instant inspiration using intelligent randomization algorithms.
-- **Chord Generator**: Drag-and-drop harmonic structures directly into your tracks.
-- **Performance Pads**: Real-time triggering for live improvisation.
+- React 19, TypeScript, Vite 8, Tailwind CSS 4
+- Web Audio API
+- Capacitor Android
+- Vitest and Testing Library tooling
 
-### 🎛️ Master-Grade Processing
-- **5-Band Master EQ**: Shape your final sound with surgical precision.
-- **Master Effects**: Integrated Reverb Chamber, Delay, and resonant Filters.
-- **Advanced Dynamics**: Multiband Compressor, Master Limiter, and Tape Saturation for that "warm" professional finish.
-- **24-Enhancement Rack**: A comprehensive suite of analog-style enhancements (Tube, Crunch, Excite, Air, etc.).
+## Requirements and browser support
 
-### 🔊 Spatial & Monitoring
-- **Spatial Panner**: Position your tracks in a 2D soundstage for wide, immersive mixes.
-- **OLED-Style Oscilloscope**: Real-time waveform visualization.
-- **Spectral Analyzer**: High-resolution frequency distribution monitoring.
+- Node.js 20+ for CI parity (Node.js 18+ remains suitable for local development).
+- Chromium desktop is the primary supported browser.
+- Web MIDI, microphone recording, and `StereoPannerNode` are feature-detected and may be unavailable in some browsers.
+- Audio must be enabled from a user gesture due to browser autoplay policy.
 
-## 🛠️ Tech Stack
+## Commands
 
-- **Framework**: React 19 + TypeScript
-- **Bundler**: Vite 8
-- **Styling**: Tailwind CSS 4
-- **Animation**: Framer Motion
-- **Icons**: Lucide React
-- **Audio Engine**: Web Audio API (Client-side synthesis and processing)
-
-## 📦 Getting Started
-
-### Prerequisites
-- Node.js 18+
-
-### Installation
 ```bash
 npm install
-```
-
-### Development
-```bash
 npm run dev
-```
-Open [http://localhost:3000](http://localhost:3000) to start producing.
-
-### Production Build
-```bash
+npm run typecheck
+npm test
 npm run build
-npm run preview
 ```
 
-## ⌨️ Controls & Shortcuts
+## Production status
+
+Qamelot Studio is feature-rich but still in active production hardening. The next release-critical tasks are:
+
+1. Move event consumption into an AudioWorklet and retain the look-ahead scheduler as the transport source.
+2. Complete explicit track/bus/master routing and a true peak limiter.
+3. Expand unit/browser/device test coverage and automated Android build verification.
+
+See [`docs/PRODUCTION_ARCHITECTURE.md`](docs/PRODUCTION_ARCHITECTURE.md) for routing, persistence, performance, QA, and release guidance.
+
+## Controls
 
 | Action | Shortcut |
-|--------|----------|
-| **Play / Stop** | `Space` |
-| **Save Project** | `Ctrl/Cmd + S` |
-| **Undo** | `Ctrl/Cmd + Z` |
-| **Redo** | `Ctrl/Cmd + Y` or `Ctrl/Cmd + Shift + Z` |
-| **Reset Project** | `Ctrl/Cmd + Shift + R` |
+| --- | --- |
+| Play / Stop | `Space` |
+| Save project | `Ctrl/Cmd + S` |
+| Undo | `Ctrl/Cmd + Z` |
+| Redo | `Ctrl/Cmd + Y` or `Ctrl/Cmd + Shift + Z` |
+| Reset project | `Ctrl/Cmd + Shift + R` |
 
-## 📱 Mobile & Android Support
-Qamelot includes a Capacitor-based Android wrapper located in the `android/` directory, allowing for a native-like experience on mobile devices with hardware-accelerated audio.
+## License
 
-## 📄 License
 MIT

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Play, Square, Palmtree, Shuffle } from 'lucide-react';
+import { Save, Play, Square, Palmtree, Shuffle, Zap } from 'lucide-react';
 
 import { useProject } from './hooks/useProject';
 import { audioEngine } from './audio/AudioEngine';
@@ -121,13 +121,21 @@ export default function App() {
               Audio Production Workstation
             </p>
             <button
-              onClick={() => {
+              type="button"
+              aria-label="Initialize the audio engine"
+              onClick={async () => {
                 audioEngine.init();
+                await audioEngine.playInitializationSfx();
                 setStarted(true);
               }}
-              className="w-full py-4 md:py-5 bg-white hover:bg-zinc-100 text-black rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition-all"
+              className="initialize-engine-button group w-full"
             >
-              Initialize Engine
+              <span className="initialize-engine-button__arc initialize-engine-button__arc--left" aria-hidden="true" />
+              <span className="initialize-engine-button__arc initialize-engine-button__arc--right" aria-hidden="true" />
+              <span className="initialize-engine-button__content">
+                <Zap className="initialize-engine-button__icon" aria-hidden="true" />
+                <span>Initialize Engine</span>
+              </span>
             </button>
           </div>
         </div>
@@ -157,7 +165,7 @@ export default function App() {
               <button onClick={humanizeIslandBeat} className="hidden md:flex items-center gap-1.5 p-2 px-3 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25 font-bold text-xs" title="Add subtle percussion and accent variation">
                 <Shuffle className="w-4 h-4" /> Humanize
               </button>
-              <ProjectHub project={project} onLoad={loadProjectData} />
+              <ProjectHub project={project} onLoad={loadProjectData} onSave={saveProject} />
               <button onClick={saveProject} className="p-1.5 md:p-2 md:px-4 bg-cyan-500 hover:bg-cyan-400 rounded-lg text-white font-bold"><Save className="w-4 h-4" /></button>
             </div>
           </header>

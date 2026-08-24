@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { audioEngine } from '../audio/AudioEngine';
+import { createProjectDocument, migrateProjectDocument } from '../project/projectDocument';
 
 const ISLAND_GRID = [
   [true, false, false, true, false, false, true, false, true, false, false, true, false, true, false, false],
@@ -47,8 +48,8 @@ const DEFAULT_PROJECT: ProjectData = {
   trackMutes: Array(6).fill(false),
   trackSolos: Array(6).fill(false),
   trackVolumes: [88, 74, 57, 64, 72, 48],
-  trackSounds: ['deep-kick', 'classic-clap', 'shaker', 'conga-low', '808-sub', 'dream-pluck'],
-  trackNames: ['Island Kick', 'Palm Clap', 'Shaker', 'Conga', 'Sub Bass', 'Tropical Pluck'],
+  trackSounds: ['island-kick', 'island-clap', 'island-shaker', 'island-conga', 'island-sub', 'island-mallet'],
+  trackNames: ['Island Kick', 'Palm Clap', 'Shaker', 'Conga', 'Sub Bass', 'Tropical Mallet'],
   trackColors: ['#22c55e', '#fb7185', '#facc15', '#f97316', '#8b5cf6', '#38bdf8'],
   filterType: 'lowpass',
   sequencerGrid: DEFAULT_GRID,
@@ -110,11 +111,14 @@ export function useProject() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const restored = normalizeProject(parsed);
+        const migrated = migrateProjectDocument(parsed);
+        if (!migrated) return;
+        const restored = normalizeProject(migrated.document.project);
         setProject(restored);
         historyRef.current = [restored];
         historyIndexRef.current = 0;
         updateHistoryState();
+        if (migrated.migrated) localStorage.setItem('qamelot-project', JSON.stringify(createProjectDocument(restored)));
       } catch (e) {
         console.error('Failed to load project', e);
       }
@@ -158,11 +162,15 @@ export function useProject() {
   }, [updateHistoryState]);
 
   const saveProject = useCallback(() => {
-    localStorage.setItem('qamelot-project', JSON.stringify(project));
+    const existing = (() => {
+      try { return migrateProjectDocument(JSON.parse(localStorage.getItem('qamelot-project') || 'null'))?.document.metadata; } catch { return undefined; }
+    })();
+    localStorage.setItem('qamelot-project', JSON.stringify(createProjectDocument(project, existing)));
   }, [project]);
   const loadProjectData = useCallback((data: unknown) => {
-    if (data && typeof data === 'object') {
-      const restored = normalizeProject(data as Partial<ProjectData>);
+    const migrated = migrateProjectDocument(data);
+    if (migrated) {
+      const restored = normalizeProject(migrated.document.project);
       setProject(restored);
       historyRef.current = [restored];
       historyIndexRef.current = 0;

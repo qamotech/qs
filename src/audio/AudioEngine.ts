@@ -104,6 +104,124 @@ export class AudioEngine {
     }
   }
 
+  async playInitializationSfx() {
+    this.init();
+    if (!this.ctx || !this.masterGain) return;
+
+    if (this.ctx.state === 'suspended') {
+      await this.ctx.resume();
+    }
+    if (this.ctx.state !== 'running') return;
+
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const output = ctx.createGain();
+    const limiter = ctx.createDynamicsCompressor();
+    limiter.threshold.value = -14;
+    limiter.knee.value = 16;
+    limiter.ratio.value = 10;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.18;
+    output.gain.setValueAtTime(0.0001, now);
+    output.gain.exponentialRampToValueAtTime(0.28, now + 0.015);
+    output.gain.exponentialRampToValueAtTime(0.0001, now + 1.15);
+    output.connect(limiter);
+    limiter.connect(this.masterGain);
+
+    const createNoise = (duration: number) => {
+      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let index = 0; index < data.length; index++) data[index] = Math.random() * 2 - 1;
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      return source;
+    };
+
+    // Rising ionization: the charge before the bolt lands.
+    const charge = ctx.createOscillator();
+    const chargeGain = ctx.createGain();
+    const chargeFilter = ctx.createBiquadFilter();
+    charge.type = 'sawtooth';
+    charge.frequency.setValueAtTime(110, now);
+    charge.frequency.exponentialRampToValueAtTime(1850, now + 0.34);
+    chargeFilter.type = 'bandpass';
+    chargeFilter.frequency.setValueAtTime(380, now);
+    chargeFilter.frequency.exponentialRampToValueAtTime(4100, now + 0.34);
+    chargeFilter.Q.value = 3.5;
+    chargeGain.gain.setValueAtTime(0.0001, now);
+    chargeGain.gain.exponentialRampToValueAtTime(0.12, now + 0.12);
+    chargeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.37);
+    charge.connect(chargeFilter);
+    chargeFilter.connect(chargeGain);
+    chargeGain.connect(output);
+    charge.start(now);
+    charge.stop(now + 0.38);
+
+    // Branching arc snaps surround the main strike with sharp, flickering detail.
+    [0.19, 0.27, 0.35].forEach((start, index) => {
+      const arc = ctx.createOscillator();
+      const arcGain = ctx.createGain();
+      arc.type = 'square';
+      arc.frequency.setValueAtTime(1300 + index * 530, now + start);
+      arc.frequency.exponentialRampToValueAtTime(240 + index * 80, now + start + 0.075);
+      arcGain.gain.setValueAtTime(0.0001, now + start);
+      arcGain.gain.exponentialRampToValueAtTime(0.14, now + start + 0.002);
+      arcGain.gain.exponentialRampToValueAtTime(0.0001, now + start + 0.08);
+      arc.connect(arcGain);
+      arcGain.connect(output);
+      arc.start(now + start);
+      arc.stop(now + start + 0.09);
+    });
+
+    // Main bolt: bright, wide-band crack followed by a decaying high-voltage hiss.
+    const bolt = createNoise(0.52);
+    const boltFilter = ctx.createBiquadFilter();
+    const boltGain = ctx.createGain();
+    boltFilter.type = 'highpass';
+    boltFilter.frequency.value = 950;
+    boltGain.gain.setValueAtTime(0.0001, now + 0.36);
+    boltGain.gain.exponentialRampToValueAtTime(0.92, now + 0.363);
+    boltGain.gain.exponentialRampToValueAtTime(0.075, now + 0.46);
+    boltGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.84);
+    bolt.connect(boltFilter);
+    boltFilter.connect(boltGain);
+    boltGain.connect(output);
+    bolt.start(now + 0.36);
+
+    // A low, filtered thunder tail makes the lightning strike feel large rather than digital.
+    const thunder = createNoise(0.78);
+    const thunderFilter = ctx.createBiquadFilter();
+    const thunderGain = ctx.createGain();
+    thunderFilter.type = 'lowpass';
+    thunderFilter.frequency.setValueAtTime(220, now + 0.4);
+    thunderFilter.frequency.exponentialRampToValueAtTime(75, now + 1.1);
+    thunderFilter.Q.value = 1.1;
+    thunderGain.gain.setValueAtTime(0.0001, now + 0.39);
+    thunderGain.gain.exponentialRampToValueAtTime(0.5, now + 0.43);
+    thunderGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.14);
+    thunder.connect(thunderFilter);
+    thunderFilter.connect(thunderGain);
+    thunderGain.connect(output);
+    thunder.start(now + 0.39);
+
+    // The final electric shimmer signals that the engine is online.
+    [1046, 1568].forEach((frequency, index) => {
+      const shimmer = ctx.createOscillator();
+      const shimmerGain = ctx.createGain();
+      const start = 0.61 + index * 0.06;
+      shimmer.type = 'sine';
+      shimmer.frequency.setValueAtTime(frequency * 0.72, now + start);
+      shimmer.frequency.exponentialRampToValueAtTime(frequency, now + start + 0.09);
+      shimmerGain.gain.setValueAtTime(0.0001, now + start);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.11, now + start + 0.012);
+      shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.05);
+      shimmer.connect(shimmerGain);
+      shimmerGain.connect(output);
+      shimmer.start(now + start);
+      shimmer.stop(now + 1.06);
+    });
+  }
+
   getAudioData(dataArray: Uint8Array) {
     if (this.analyser) {
       // Web Audio typings expect a generic Uint8Array buffer view
@@ -236,6 +354,94 @@ export class AudioEngine {
     // this.activePack = pack;
   }
 
+  private playIslandVoice(soundId: string, frequency: number, baseVol: number, output: AudioNode) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const now = ctx.currentTime;
+    const connectOscillator = (type: OscillatorType, startFrequency: number, endFrequency: number, peak: number, release: number, destination = output) => {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(Math.max(10, startFrequency), now);
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(10, endFrequency), now + release);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(peak, now + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + release);
+      oscillator.connect(gain);
+      gain.connect(destination);
+      oscillator.start(now);
+      oscillator.stop(now + release + 0.02);
+    };
+    const connectNoise = (filterType: BiquadFilterType, filterFrequency: number, peak: number, release: number) => {
+      const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * release), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let index = 0; index < data.length; index++) data[index] = (Math.random() * 2 - 1) * (1 - index / data.length);
+      const source = ctx.createBufferSource();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+      source.buffer = buffer;
+      filter.type = filterType;
+      filter.frequency.value = filterFrequency;
+      filter.Q.value = 0.9;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(peak, now + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + release);
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(output);
+      source.start(now);
+    };
+
+    switch (soundId) {
+      case 'island-kick':
+        connectOscillator('sine', 155, 48, baseVol * 0.9, 0.48);
+        connectOscillator('triangle', 120, 58, baseVol * 0.24, 0.22);
+        connectNoise('lowpass', 1800, baseVol * 0.08, 0.035);
+        return;
+      case 'island-clap':
+        [0, 0.028, 0.058].forEach((offset, index) => {
+          const delayedOutput = ctx.createGain();
+          delayedOutput.gain.value = 1 - index * 0.18;
+          delayedOutput.connect(output);
+          const originalNow = ctx.currentTime;
+          const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.14), ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let sample = 0; sample < data.length; sample++) data[sample] = (Math.random() * 2 - 1) * (1 - sample / data.length);
+          const source = ctx.createBufferSource();
+          const filter = ctx.createBiquadFilter();
+          const gain = ctx.createGain();
+          source.buffer = buffer;
+          filter.type = 'bandpass';
+          filter.frequency.value = 1500;
+          filter.Q.value = 0.65;
+          gain.gain.setValueAtTime(0.0001, originalNow + offset);
+          gain.gain.exponentialRampToValueAtTime(baseVol * 0.26, originalNow + offset + 0.004);
+          gain.gain.exponentialRampToValueAtTime(0.0001, originalNow + offset + 0.13);
+          source.connect(filter);
+          filter.connect(gain);
+          gain.connect(delayedOutput);
+          source.start(originalNow + offset);
+        });
+        return;
+      case 'island-shaker':
+        connectNoise('highpass', 5200, baseVol * 0.2, 0.095);
+        return;
+      case 'island-conga':
+        connectOscillator('sine', frequency * 1.45, frequency * 0.82, baseVol * 0.52, 0.3);
+        connectOscillator('triangle', frequency * 2.1, frequency * 1.15, baseVol * 0.18, 0.16);
+        return;
+      case 'island-sub':
+        connectOscillator('sine', frequency * 1.08, frequency, baseVol * 0.72, 0.74);
+        connectOscillator('triangle', frequency * 1.08, frequency, baseVol * 0.14, 0.44);
+        return;
+      case 'island-mallet':
+        connectOscillator('sine', frequency * 2, frequency * 2, baseVol * 0.32, 0.32);
+        connectOscillator('sine', frequency * 3.01, frequency * 3.01, baseVol * 0.16, 0.2);
+        connectOscillator('triangle', frequency, frequency * 0.998, baseVol * 0.28, 0.5);
+        return;
+    }
+  }
+
   playSound(trackIdx: number, soundId?: string, semitoneOffset = 0, velocity = 1) {
     if (this.ctx?.state !== 'running' || !this.masterGain) return;
     
@@ -326,6 +532,11 @@ export class AudioEngine {
       output = pumpGain;
     }
     output.connect(this.masterGain);
+
+    if (soundId.startsWith('island-')) {
+      this.playIslandVoice(soundId, baseFreq, baseVol, gain);
+      return;
+    }
 
     if (preset.type === 'osc') {
       const voiceCount = Math.max(1, Math.min(4, this.soundDesign.unison));
